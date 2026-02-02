@@ -1,18 +1,18 @@
-"""
-Brain v3 - AI Agent Memory System
-
-Persistent, encrypted memory for AI agents with Soul, Bonding, and Semantic Search.
-
-Install:
-    pip install git+https://github.com/clawcolab/brain-v3.git
-
-Usage:
-    from brain import Brain, Memory, Soul, Bond, Goal
-    
-    brain = Brain()
-"""
-
-from .brain_v3 import Brain, Memory, Todo, Soul, Bond, Goal
+"""Claw Brain - Brain module"""
 
 __version__ = "3.0.0"
-__all__ = ["Brain", "Memory", "Todo", "Soul", "Bond", "Goal"]
+
+import importlib.util
+import os
+
+clawbrain_path = os.path.join(os.path.dirname(__file__), "clawbrain.py")
+spec = importlib.util.spec_from_file_location("clawbrain", clawbrain_path)
+clawbrain = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(clawbrain)
+
+Brain = clawbrain.Brain
+Memory = clawbrain.Memory
+UserProfile = clawbrain.UserProfile
+Embedder = clawbrain.Embedder
+
+__all__ = ["Brain", "Memory", "UserProfile", "Embedder"]
