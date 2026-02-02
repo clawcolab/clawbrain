@@ -249,7 +249,23 @@ class Brain:
         return self._storage
     
     # ========== MEMORIES ==========
-    def remember(self, agent_id: str, memory_type: str, content: str, key: str = None, tags: List[str] = None, **kwargs) -> Memory:
+    def remember(self, agent_id: str, memory_type: str, content: str, key: str = None,
+                 tags: List[str] = None, auto_tag: bool = False, **kwargs) -> Memory:
+        """
+        Store a memory with optional tags.
+
+        Args:
+            agent_id: Agent identifier
+            memory_type: Type of memory (e.g., "knowledge", "preference", "conversation")
+            content: Memory content
+            key: Optional memory key (auto-generated if not provided)
+            tags: Optional list of tags for categorization
+            auto_tag: If True, automatically add extracted keywords as tags
+            **kwargs: Additional options (importance, linked_to, source)
+
+        Returns:
+            Memory object
+        """
         now = datetime.now().isoformat()
         memory_id = str(hashlib.md5(f"{agent_id}:{memory_type}:{content[:100]}".encode()).hexdigest())
         keywords = self._extract_keywords([{"content": content}])
@@ -257,12 +273,20 @@ class Brain:
         if self._embedder and self._embedder.model and memory_type != "secret":
             embedding = self._embedder.embed(content)
 
+        # Handle auto_tag: add extracted keywords as tags
+        final_tags = set(tags) if tags else set()
+        if auto_tag:
+            # Add significant keywords as tags (filter short/common words)
+            for kw in keywords:
+                if len(kw) > 2 and kw.lower() not in final_tags:
+                    final_tags.add(kw.lower())
+
         memory = Memory(
             id=memory_id, agent_id=agent_id, memory_type=memory_type,
             key=key or f"{memory_type}:{content[:50]}",
             content=content, content_encrypted=False,
             summary=self._summarize([{"content": content}]),
-            keywords=keywords, tags=tags or [],
+            keywords=keywords, tags=list(final_tags),
             importance=kwargs.get("importance", 5),
             linked_to=kwargs.get("linked_to"), source=kwargs.get("source"),
             embedding=embedding, created_at=now, updated_at=now
@@ -315,35 +339,54 @@ class Brain:
             rows = cursor.fetchall()
         return [self._row_to_memory(row) for row in rows]
 
-    def search_by_tags(self, tags: List[str], agent_id: str = None, memory_type: str = None, limit: int = 20) -> List[Memory]:
+    def search_by_tags(self, tags: List[str], agent_id: str = None, memory_type: str = None,
+                       match: str = "OR", limit: int = 20) -> List[Memory]:
         """
-        Search memories by tags. Returns memories that contain ANY of the specified tags.
+        Search memories by tags with AND/OR logic support.
 
         Args:
-            tags: List of tags to search for (OR logic - matches any tag)
+            tags: List of tags to search for
             agent_id: Optional agent filter
             memory_type: Optional memory type filter
+            match: "OR" (any tag matches) or "AND" (all tags must match)
             limit: Maximum results to return
 
         Returns:
             List of Memory objects matching the tags
         """
+        if not tags:
+            return []
+
         with self._get_cursor() as cursor:
             conditions, params = [], []
 
-            # For SQLite, we need to search in JSON string
-            if self._storage == "sqlite":
-                for tag in tags:
-                    conditions.append("tags LIKE ?")
-                    params.append(f'%"{tag}"%')
-                where_clause = " OR ".join(conditions) if conditions else "1=0"
+            if match.upper() == "OR":
+                # OR logic: memory has ANY of the tags
+                if self._storage == "sqlite":
+                    for tag in tags:
+                        conditions.append("tags LIKE ?")
+                        params.append(f'%"{tag}"%')
+                    where_clause = " OR ".join(conditions) if conditions else "1=0"
+                else:
+                    tag_conditions = []
+                    for tag in tags:
+                        tag_conditions.append(f"tags @> %s")
+                        params.append(json.dumps([tag]))
+                    where_clause = " OR ".join(tag_conditions) if tag_conditions else "1=0"
             else:
-                # PostgreSQL can use JSON operators
-                tag_conditions = []
-                for i, tag in enumerate(tags):
-                    tag_conditions.append(f"tags @> %s")
-                    params.append(json.dumps([tag]))
-                where_clause = " OR ".join(tag_conditions) if tag_conditions else "1=0"
+                # AND logic: memory must have ALL tags
+                # For this, we check each tag and count matches
+                if self._storage == "sqlite":
+                    for tag in tags:
+                        conditions.append("tags LIKE ?")
+                        params.append(f'%"{tag}"%')
+                    where_clause = " AND ".join(conditions)
+                else:
+                    tag_conditions = []
+                    for tag in tags:
+                        tag_conditions.append(f"tags @> %s")
+                        params.append(json.dumps([tag]))
+                    where_clause = " AND ".join(tag_conditions)
 
             if agent_id:
                 where_clause += " AND agent_id = " + ("?" if self._storage == "sqlite" else "%s")
@@ -365,6 +408,18 @@ class Brain:
                 )
 
             rows = cursor.fetchall()
+
+            # For AND mode on SQLite, filter results to ensure all tags present
+            if match.upper() == "AND" and self._storage == "sqlite":
+                filtered = []
+                for row in rows:
+                    mem_tags = row["tags"]
+                    if isinstance(mem_tags, str):
+                        mem_tags = json.loads(mem_tags) if mem_tags else []
+                    if all(tag in mem_tags for tag in tags):
+                        filtered.append(row)
+                rows = filtered[:limit]
+
         return [self._row_to_memory(row) for row in rows]
 
     def get_all_tags(self, agent_id: str = None) -> List[str]:
@@ -398,6 +453,100 @@ class Brain:
                 if isinstance(tags, list):
                     all_tags.update(tags)
             return sorted(list(all_tags))
+
+    def get_tag_stats(self, agent_id: str = None, memory_type: str = None) -> Dict[str, int]:
+        """
+        Get tag usage statistics - which tags are most used.
+
+        Args:
+            agent_id: Optional agent filter
+            memory_type: Optional memory type filter
+
+        Returns:
+            Dict mapping tag -> count, sorted by count descending
+        """
+        with self._get_cursor() as cursor:
+            conditions, params = [], []
+            if agent_id:
+                conditions.append("agent_id = " + ("?" if self._storage == "sqlite" else "%s"))
+                params.append(agent_id)
+            if memory_type:
+                conditions.append("memory_type = " + ("?" if self._storage == "sqlite" else "%s"))
+                params.append(memory_type)
+
+            where = " AND ".join(conditions) if conditions else "1=1"
+
+            if self._storage == "sqlite":
+                cursor.execute(f"SELECT tags FROM memories WHERE {where} AND tags IS NOT NULL", tuple(params))
+            else:
+                cursor.execute(f"SELECT tags FROM memories WHERE {where} AND tags IS NOT NULL", tuple(params))
+
+            tag_counts = {}
+            for row in cursor.fetchall():
+                tags = row["tags"]
+                if isinstance(tags, str):
+                    tags = json.loads(tags) if tags else []
+                if isinstance(tags, list):
+                    for tag in tags:
+                        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+            # Sort by count descending
+            return dict(sorted(tag_counts.items(), key=lambda x: -x[1]))
+
+    def search_by_tag_hierarchy(self, parent_tag: str, agent_id: str = None,
+                                memory_type: str = None, limit: int = 20) -> List[Memory]:
+        """
+        Search memories by tag hierarchy (parent tag and all child tags).
+
+        Example:
+            parent_tag="api" matches: "api", "api:clawhub", "api:rest", "api/graphql"
+
+        Args:
+            parent_tag: Parent tag to match (with all children)
+            agent_id: Optional agent filter
+            memory_type: Optional memory type filter
+            limit: Maximum results to return
+
+        Returns:
+            List of Memory objects matching the hierarchy
+        """
+        # Generate tag patterns for hierarchy search
+        patterns = [
+            f'"{parent_tag}"',           # Exact match
+            f'"{parent_tag}:"',          # api:child
+            f'"{parent_tag}/"',          # api/child
+            f'"{parent_tag}-"',          # api-child
+        ]
+
+        with self._get_cursor() as cursor:
+            conditions, params = [], []
+            for pattern in patterns:
+                conditions.append("tags LIKE ?")
+                params.append(f'%{pattern}%')
+
+            where_clause = " OR ".join(conditions)
+
+            if agent_id:
+                where_clause += " AND agent_id = " + ("?" if self._storage == "sqlite" else "%s")
+                params.append(agent_id)
+
+            if memory_type:
+                where_clause += " AND memory_type = " + ("?" if self._storage == "sqlite" else "%s")
+                params.append(memory_type)
+
+            if self._storage == "sqlite":
+                cursor.execute(
+                    f"SELECT * FROM memories WHERE {where_clause} ORDER BY importance DESC, created_at DESC LIMIT {limit}",
+                    tuple(params)
+                )
+            else:
+                cursor.execute(
+                    f"SELECT * FROM memories WHERE {where_clause} ORDER BY importance DESC, created_at DESC LIMIT %s",
+                    tuple(params + [limit])
+                )
+
+            rows = cursor.fetchall()
+        return [self._row_to_memory(row) for row in rows]
 
     def add_tags_to_memory(self, memory_id: str, tags: List[str]) -> bool:
         """
@@ -440,6 +589,92 @@ class Brain:
                     (updated_tags, now, memory_id)
                 )
         return True
+
+    def link_memories(self, memory_id: str, linked_memory_id: str, bidirectional: bool = True) -> bool:
+        """
+        Link two memories together for cross-referencing.
+
+        Args:
+            memory_id: Source memory ID
+            linked_memory_id: Target memory ID to link to
+            bidirectional: If True, also link target back to source
+
+        Returns:
+            True if linked successfully, False if any memory not found
+        """
+        # Get both memories
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute("SELECT id, linked_to FROM memories WHERE id IN (?, ?)", (memory_id, linked_memory_id))
+            else:
+                cursor.execute("SELECT id, linked_to FROM memories WHERE id IN (%s, %s)", (memory_id, linked_memory_id))
+
+            rows = cursor.fetchall()
+            found_ids = {row["id"]: row["linked_to"] for row in rows}
+
+            if memory_id not in found_ids or linked_memory_id not in found_ids:
+                return False
+
+            # Update source memory
+            current_link = found_ids.get(memory_id, "") or ""
+            linked_set = set(current_link.split(",")) if current_link else set()
+            linked_set.add(linked_memory_id)
+            new_link = ",".join(linked_set)
+
+            now = datetime.now().isoformat()
+            if self._storage == "sqlite":
+                cursor.execute("UPDATE memories SET linked_to = ?, updated_at = ? WHERE id = ?", (new_link, now, memory_id))
+            else:
+                cursor.execute("UPDATE memories SET linked_to = %s, updated_at = %s WHERE id = %s", (new_link, now, memory_id))
+
+            # Update target memory (bidirectional)
+            if bidirectional:
+                target_link = found_ids.get(linked_memory_id, "") or ""
+                target_set = set(target_link.split(",")) if target_link else set()
+                target_set.add(memory_id)
+                target_new_link = ",".join(target_set)
+
+                if self._storage == "sqlite":
+                    cursor.execute("UPDATE memories SET linked_to = ?, updated_at = ? WHERE id = ?",
+                                   (target_new_link, now, linked_memory_id))
+                else:
+                    cursor.execute("UPDATE memories SET linked_to = %s, updated_at = %s WHERE id = %s",
+                                   (target_new_link, now, linked_memory_id))
+
+            return True
+
+    def get_linked_memories(self, memory_id: str) -> List[Memory]:
+        """
+        Get all memories linked to a specific memory.
+
+        Args:
+            memory_id: The memory ID to get links for
+
+        Returns:
+            List of linked Memory objects
+        """
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute("SELECT linked_to FROM memories WHERE id = ?", (memory_id,))
+            else:
+                cursor.execute("SELECT linked_to FROM memories WHERE id = %s", (memory_id,))
+
+            row = cursor.fetchone()
+            if not row or not row["linked_to"]:
+                return []
+
+            linked_ids = [lid.strip() for lid in row["linked_to"].split(",") if lid.strip()]
+            if not linked_ids:
+                return []
+
+            placeholders = ",".join(["?"] * len(linked_ids)) if self._storage == "sqlite" else ",".join(["%s"] * len(linked_ids))
+            if self._storage == "sqlite":
+                cursor.execute(f"SELECT * FROM memories WHERE id IN ({placeholders})", tuple(linked_ids))
+            else:
+                cursor.execute(f"SELECT * FROM memories WHERE id IN ({placeholders})", tuple(linked_ids))
+
+            rows = cursor.fetchall()
+        return [self._row_to_memory(row) for row in rows]
 
     def _row_to_memory(self, row) -> Memory:
         # Handle keywords - can be list (PostgreSQL) or string (SQLite)
