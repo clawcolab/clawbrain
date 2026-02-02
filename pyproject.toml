@@ -3,18 +3,17 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "brain-v3"
+name = "clawbrain"
 version = "3.0.0"
-description = "AI Agent Memory System with Soul, Bonding, and Semantic Search"
+description = "ClawBrain - Personal AI Memory System for AI Agents"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
-dependencies = [
-    "psycopg2-binary>=2.9.0",
-    "redis>=4.5.0",
-    "cryptography>=41.0.0",
-]
 
 [project.urls]
-Homepage = "https://github.com/clawcolab/brain-v3"
-Repository = "https://github.com/clawcolab/brain-v3"
+Homepage = "https://github.com/clawcolab/clawbrain"
+Repository = "https://github.com/clawcolab/clawbrain"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["brain*"]
