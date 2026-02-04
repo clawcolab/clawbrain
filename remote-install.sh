@@ -7,17 +7,25 @@ set -e
 echo "🧠 ClawBrain Remote Installer"
 echo "=============================="
 
-# Detect skills directory
-if [ -d "$HOME/.openclaw/skills" ]; then
+# Detect skills directory - check existing locations first
+if [ -d "$HOME/clawd/skills" ]; then
+    SKILLS_DIR="$HOME/clawd/skills"
+elif [ -d "$HOME/.openclaw/skills" ]; then
     SKILLS_DIR="$HOME/.openclaw/skills"
 elif [ -d "$HOME/.clawdbot/skills" ]; then
     SKILLS_DIR="$HOME/.clawdbot/skills"
-elif [ -d "$HOME/clawd/skills" ]; then
-    SKILLS_DIR="$HOME/clawd/skills"
 else
-    # Create default
-    mkdir -p "$HOME/.openclaw/skills"
-    SKILLS_DIR="$HOME/.openclaw/skills"
+    # Create default based on what config exists
+    if [ -d "$HOME/.openclaw" ]; then
+        mkdir -p "$HOME/.openclaw/skills"
+        SKILLS_DIR="$HOME/.openclaw/skills"
+    elif [ -d "$HOME/.clawdbot" ]; then
+        mkdir -p "$HOME/.clawdbot/skills"
+        SKILLS_DIR="$HOME/.clawdbot/skills"
+    else
+        mkdir -p "$HOME/clawd/skills"
+        SKILLS_DIR="$HOME/clawd/skills"
+    fi
 fi
 
 echo "📁 Installing to: $SKILLS_DIR/clawbrain"
