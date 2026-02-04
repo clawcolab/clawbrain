@@ -1,12 +1,15 @@
 ---
 name: clawbrain
-description: "Claw Brain - Personal AI Memory System for ClawDBot. Provides memory, personality, bonding, and learning capabilities."
-metadata: {"clawdbot":{"emoji":"🧠","requires":{"files":["clawbrain.py"]},"install":[{"id":"git","kind":"git","url":"https://github.com/clawcolab/clawbrain.git","label":"Install Claw Brain (git)"}]}}
+version: 3.0.0
+description: "Claw Brain - Personal AI Memory System for OpenClaw/ClawDBot. Provides memory, personality, bonding, and learning capabilities. Auto-refreshes on service restart."
+metadata: {"openclaw":{"emoji":"🧠","category":"memory","provides":{"slot":"memory"},"events":["gateway:startup","command:new"]},"clawdbot":{"emoji":"🧠","category":"memory","provides":{"slot":"memory"},"events":["gateway:startup","command:new"]}}
 ---
 
 # Claw Brain Skill 🧠
 
-Personal AI Memory System with Soul, Bonding, and Learning for ClawDBot.
+Personal AI Memory System with Soul, Bonding, and Learning for OpenClaw/ClawDBot.
+
+> **Auto-Refresh on Restart**: ClawBrain automatically refreshes memory when the service restarts.
 
 ## Features
 
@@ -15,116 +18,109 @@ Personal AI Memory System with Soul, Bonding, and Learning for ClawDBot.
 - 💭 **Conversation State** - Real-time mood detection and context tracking
 - 📚 **Learning Insights** - Continuously learns from interactions and corrections
 - 🧠 **get_full_context()** - Everything for personalized responses
+- 🔄 **Auto-Refresh** - Automatically refreshes memory on service restart
+- 🔐 **Encrypted Secrets** - Store API keys and credentials securely
 
 ---
 
-## Installation
+## Quick Install
 
-### Option 1: Git Clone (Recommended for ClawDBot)
-
+**One-liner (recommended):**
 ```bash
-# Clone into ClawDBot workspace
-git clone https://github.com/clawcolab/clawbrain.git ClawBrain
+curl -fsSL https://raw.githubusercontent.com/clawcolab/clawbrain/main/remote-install.sh | bash
 ```
 
-### Option 2: pip install
-
-```bash
-pip install git+https://github.com/clawcolab/clawbrain.git
-```
-
----
-
-## ClawDBot Setup
-
-### 1. Install the Skill
-
-```bash
-# Clone to your ClawDBot workspace
-cd /path/to/your/clawdbot
-git clone https://github.com/clawcolab/clawbrain.git ClawBrain
-```
-
-### 2. Import in Your Bot
-
-Add to your bot's main file (e.g., `main.py`):
-
-```python
-import sys
-sys.path.insert(0, "ClawBrain")
-
-from clawbrain import Brain
-
-# Initialize the brain
-brain = Brain()
-
-# Make it available globally or pass to handlers
-app.brain = brain
-```
-
-### 3. Use in Message Handlers
-
-```python
-def handle_message(message, channel="telegram"):
-    # Get user context
-    context = app.brain.get_full_context(
-        session_key=f"{channel}_{message.chat.id}",
-        user_id=str(message.chat.id),
-        agent_id="jarvis",
-        message=message.text
-    )
-    
-    # Generate personalized response
-    response = generate_response(context)
-    
-    # Store conversation
-    app.brain.remember(
-        agent_id="jarvis",
-        memory_type="conversation",
-        content=message.text,
-        key=f"last_message_{message.chat.id}"
-    )
-    
-    return response
-```
+This will:
+1. Detect your platform (ClawdBot or OpenClaw)
+2. Clone to the correct skills directory
+3. Install the startup hook automatically
+4. Check Python dependencies
 
 ---
 
 ## Configuration
 
-### Environment Variables
+After installation, configure your agent ID:
 
 ```bash
-# PostgreSQL (optional - auto-detected)
-export POSTGRES_HOST=192.168.4.176
-export POSTGRES_PORT=5432
-export POSTGRES_DB=clawcolab
-export POSTGRES_USER=postgres
-export POSTGRES_PASSWORD=postgres
+# Create systemd drop-in config
+sudo mkdir -p /etc/systemd/system/clawdbot.service.d  # or openclaw.service.d
 
-# Redis (optional - auto-detected)
-export REDIS_HOST=192.168.4.175
-export REDIS_PORT=6379
+sudo tee /etc/systemd/system/clawdbot.service.d/brain.conf << EOF
+[Service]
+Environment="BRAIN_AGENT_ID=your-agent-name"
+# Optional: PostgreSQL (for production)
+# Environment="BRAIN_POSTGRES_HOST=localhost"
+# Environment="BRAIN_POSTGRES_PASSWORD=your-password"
+# Optional: Redis (for caching)
+# Environment="BRAIN_REDIS_HOST=localhost"
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl restart clawdbot  # or openclaw
 ```
 
-### Force Storage Backend
+### Environment Variables
 
-```python
-# Force SQLite (zero setup)
-brain = Brain({"storage_backend": "sqlite"})
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `BRAIN_AGENT_ID` | Unique ID for this agent's memories | `default` |
+| `BRAIN_POSTGRES_HOST` | PostgreSQL host | `localhost` |
+| `BRAIN_POSTGRES_PASSWORD` | PostgreSQL password | - |
+| `BRAIN_POSTGRES_PORT` | PostgreSQL port | `5432` |
+| `BRAIN_POSTGRES_DB` | PostgreSQL database | `brain_db` |
+| `BRAIN_POSTGRES_USER` | PostgreSQL user | `brain_user` |
+| `BRAIN_REDIS_HOST` | Redis host | `localhost` |
+| `BRAIN_REDIS_PORT` | Redis port | `6379` |
+| `BRAIN_STORAGE` | Force storage: `sqlite`, `postgresql`, `auto` | `auto` |
 
-# Force PostgreSQL
-brain = Brain({"storage_backend": "postgresql"})
+---
 
-# Auto-detect (default)
-brain = Brain()
+## How It Works
+
+### On Service Startup
+1. Hook triggers on `gateway:startup` event
+2. Detects storage backend (SQLite/PostgreSQL)
+3. Loads memories for the configured `BRAIN_AGENT_ID`
+4. Injects context into agent bootstrap
+
+### On `/new` Command
+1. Hook triggers on `command:new` event  
+2. Saves current session summary to memory
+3. Clears session state for fresh start
+
+### Storage Priority
+1. **PostgreSQL** - If available and configured
+2. **SQLite** - Fallback, zero configuration needed
+
+---
+
+## Hooks
+
+| Event | Action |
+|-------|--------|
+| `gateway:startup` | Initialize brain, refresh memories |
+| `command:new` | Save session to memory |
+
+---
+
+## Manual Installation
+
+If you prefer manual installation:
+
+```bash
+# Clone to your skills directory
+cd ~/.openclaw/skills  # or ~/clawd/skills or ~/.clawdbot/skills
+git clone https://github.com/clawcolab/clawbrain.git
+cd clawbrain
+./install.sh
 ```
 
 ---
 
-## API Reference
+## Python API
 
-### Brain Class
+For direct Python usage (outside ClawdBot/OpenClaw):
 
 ```python
 from clawbrain import Brain
@@ -153,7 +149,7 @@ brain = Brain()
 context = brain.get_full_context(
     session_key="telegram_12345",  # Unique session ID
     user_id="username",              # User identifier
-    agent_id="jarvis",             # Bot identifier
+    agent_id="assistant",          # Bot identifier
     message="Hey, how's it going?" # Current message
 )
 ```
@@ -200,7 +196,7 @@ sys.path.insert(0, "ClawBrain")
 
 from clawbrain import Brain
 
-class JarvisBot:
+class AssistantBot:
     def __init__(self):
         self.brain = Brain()
     
@@ -209,7 +205,7 @@ class JarvisBot:
         context = self.brain.get_full_context(
             session_key=f"telegram_{chat_id}",
             user_id=str(chat_id),
-            agent_id="jarvis",
+            agent_id="assistant",
             message=message
         )
         

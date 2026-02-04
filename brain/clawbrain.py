@@ -94,12 +94,12 @@ class UserProfile:
 DEFAULT_CONFIG = {
     "storage_backend": "auto",  # "sqlite", "postgresql", "auto"
     "sqlite_path": "./brain_data.db",
-    "postgres_host": "192.168.4.176",
+    "postgres_host": "localhost",
     "postgres_port": 5432,
     "postgres_db": "brain_db",
     "postgres_user": "brain_user",
-    "postgres_password": "brain_secure_password_2024_rotated",
-    "redis_host": "192.168.4.175",
+    "postgres_password": "",
+    "redis_host": "localhost",
     "redis_port": 6379,
     "redis_db": 0,
     "redis_prefix": "brain:",
@@ -693,17 +693,25 @@ class Brain:
         if isinstance(embedding, str):
             embedding = json.loads(embedding) if embedding else None
 
+        # Handle datetime - PostgreSQL returns datetime objects, SQLite returns strings
+        created_at = row["created_at"]
+        if hasattr(created_at, 'isoformat'):
+            created_at = created_at.isoformat()
+        updated_at = row["updated_at"]
+        if hasattr(updated_at, 'isoformat'):
+            updated_at = updated_at.isoformat()
+
         return Memory(
             id=row["id"], agent_id=row["agent_id"], memory_type=row["memory_type"],
             key=row["key"], content=row["content"], content_encrypted=bool(row["content_encrypted"]),
             summary=row["summary"], keywords=keywords, tags=tags,
             importance=row["importance"], linked_to=row["linked_to"], source=row["source"],
             embedding=embedding,
-            created_at=row["created_at"], updated_at=row["updated_at"]
+            created_at=created_at, updated_at=updated_at
         )
     
     # ========== CONVERSATIONS ==========
-    def remember_conversation(self, session_key: str, messages: List[Dict], agent_id: str = "jarvis", summary: str = None) -> str:
+    def remember_conversation(self, session_key: str, messages: List[Dict], agent_id: str = "assistant", summary: str = None) -> str:
         now = datetime.now().isoformat()
         conv_id = str(hashlib.md5(f"{session_key}:{now}".encode()).hexdigest())
         keywords = self._extract_keywords(messages)
@@ -764,6 +772,14 @@ class Brain:
                     return json.loads(val) if val else default
                 return val
             
+            # Helper to convert datetime to string
+            def to_isoformat(val):
+                if val is None:
+                    return None
+                if hasattr(val, 'isoformat'):
+                    return val.isoformat()
+                return val
+            
             return UserProfile(
                 user_id=row["user_id"], name=row["name"], nickname=row["nickname"],
                 preferred_name=row["preferred_name"],
@@ -778,9 +794,9 @@ class Brain:
                 important_dates=parse_json(row["important_dates"], {}),
                 life_context=parse_json(row["life_context"], {}),
                 total_interactions=row["total_interactions"] or 0,
-                first_interaction=row["first_interaction"],
-                last_interaction=row["last_interaction"],
-                updated_at=row["updated_at"]
+                first_interaction=to_isoformat(row["first_interaction"]),
+                last_interaction=to_isoformat(row["last_interaction"]),
+                updated_at=to_isoformat(row["updated_at"])
             )
         return UserProfile(user_id=user_id)
     
@@ -873,7 +889,7 @@ class Brain:
         return "statement"
     
     # ========== FULL CONTEXT ==========
-    def get_full_context(self, session_key: str, user_id: str = "default", agent_id: str = "moltbot", message: str = None) -> Dict[str, Any]:
+    def get_full_context(self, session_key: str, user_id: str = "default", agent_id: str = "assistant", message: str = None) -> Dict[str, Any]:
         now = datetime.now()
         message_analysis = {}
         if message:
@@ -910,10 +926,10 @@ class Brain:
             },
         }
     
-    def process_message(self, message: str, session_key: str, user_id: str = "default", agent_id: str = "moltbot") -> Dict[str, Any]:
+    def process_message(self, message: str, session_key: str, user_id: str = "default", agent_id: str = "assistant") -> Dict[str, Any]:
         return self.get_full_context(session_key, user_id, agent_id, message)
     
-    def generate_personality_prompt(self, agent_id: str = "moltbot", user_id: str = "default") -> str:
+    def generate_personality_prompt(self, agent_id: str = "assistant", user_id: str = "default") -> str:
         profile = self.get_user_profile(user_id)
         prompt = f"You are {agent_id}, a personal AI assistant who is helpful and friendly."
         if profile.preferred_name:

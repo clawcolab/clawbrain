@@ -12,6 +12,49 @@ A sophisticated memory and learning system that enables truly personalized AI-hu
 - 📚 **Learning Insights** - Continuously learns from interactions and corrections
 - 🧠 **get_full_context()** - Everything for personalized responses
 
+## Installation
+
+### For ClawdBot / OpenClaw (Recommended)
+
+**One-liner install:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/clawcolab/clawbrain/main/remote-install.sh | bash
+```
+
+**Or step-by-step:**
+```bash
+# Clone to your skills directory
+cd ~/.openclaw/skills  # or ~/clawd/skills or ~/.clawdbot/skills
+git clone https://github.com/clawcolab/clawbrain.git
+
+# Run the install script
+cd clawbrain
+./install.sh
+```
+
+The install script will:
+- Detect your platform (ClawdBot or OpenClaw)
+- Install the startup hook automatically
+- Check Python dependencies
+- Show you how to configure environment variables
+
+**Configure your agent ID** (add to systemd service):
+```bash
+sudo mkdir -p /etc/systemd/system/clawdbot.service.d  # or openclaw.service.d
+sudo tee /etc/systemd/system/clawdbot.service.d/brain.conf << EOF
+[Service]
+Environment="BRAIN_AGENT_ID=your-agent-name"
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart clawdbot  # or openclaw
+```
+
+### For Python Projects
+
+```bash
+pip install git+https://github.com/clawcolab/clawbrain.git
+```
+
 ## Quick Start
 
 ```bash
@@ -24,8 +67,8 @@ from clawbrain import Brain
 brain = Brain()
 context = brain.get_full_context(
     session_key="chat_123",
-    user_id="pranab",
-    agent_id="jarvis",
+    user_id="user",
+    agent_id="assistant",
     message="Hey, how's it going?"
 )
 ```
@@ -71,13 +114,13 @@ pip install psycopg2-binary redis
 
 **Environment variables (optional):**
 ```bash
-export POSTGRES_HOST=192.168.4.176
+export POSTGRES_HOST=localhost
 export POSTGRES_PORT=5432
-export POSTGRES_DB=clawcolab
-export POSTGRES_USER=postgres
-export POSTGRES_PASSWORD=postgres
+export POSTGRES_DB=brain_db
+export POSTGRES_USER=brain_user
+export POSTGRES_PASSWORD=your_password
 
-export REDIS_HOST=192.168.4.175
+export REDIS_HOST=localhost
 export REDIS_PORT=6379
 ```
 
@@ -165,7 +208,7 @@ from clawbrain import Memory, UserProfile
 # Memory
 memory = Memory(
     id="...",
-    agent_id="jarvis",
+    agent_id="assistant",
     memory_type="fact",
     key="job",
     content="User works at Walmart",
@@ -174,8 +217,8 @@ memory = Memory(
 
 # User Profile
 profile = UserProfile(
-    user_id="pranab",
-    name="Pranab",
+    user_id="user",
+    name="Alex",
     interests=["AI", "crypto"],
     communication_preferences={"style": "casual"}
 )
