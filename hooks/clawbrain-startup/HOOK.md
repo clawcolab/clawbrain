@@ -10,6 +10,13 @@ metadata:
         "requires": { "files": ["scripts/brain_bridge.py"] },
         "install": [{ "id": "workspace", "kind": "workspace", "label": "ClawBrain Skill Hook" }],
       },
+    "openclaw":
+      {
+        "emoji": "🧠",
+        "events": ["gateway:startup", "command:new"],
+        "requires": { "files": ["scripts/brain_bridge.py"] },
+        "install": [{ "id": "workspace", "kind": "workspace", "label": "ClawBrain Skill Hook" }],
+      },
   }
 ---
 
