@@ -1,28 +1,64 @@
 {
   "name": "clawbrain",
   "version": "3.0.0",
-  "description": "Personal AI Memory System for ClawDBot. Provides memory, personality, bonding, and learning capabilities.",
+  "description": "Personal AI Memory System - remembers conversations, learns preferences, and provides personalized context",
   "author": "ClawColab",
-  "repository": "https://github.com/clawcolab/clawbrain",
-  "readme": "SKILL.md",
+  "homepage": "https://github.com/clawcolab/clawbrain",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawcolab/clawbrain.git"
+  },
+  "license": "MIT",
+  "keywords": ["memory", "ai", "brain", "context", "personalization"],
+  "engines": {
+    "clawdbot": ">=2024.1.0",
+    "openclaw": ">=2024.1.0"
+  },
   "install": {
-    "git": [
+    "script": "./install.sh",
+    "remote": "curl -fsSL https://raw.githubusercontent.com/clawcolab/clawbrain/main/remote-install.sh | bash"
+  },
+  "hooks": [
+    {
+      "name": "clawbrain-startup",
+      "events": ["gateway:startup", "command:new"],
+      "description": "Refreshes brain memory on startup, saves session on /new"
+    }
+  ],
+  "environment": {
+    "required": [],
+    "optional": [
       {
-        "url": "https://github.com/clawcolab/clawbrain.git",
-        "dir": "clawbrain",
-        "label": "Install Claw Brain (git)"
+        "name": "BRAIN_AGENT_ID",
+        "description": "Unique identifier for this agent's memories",
+        "default": "default"
+      },
+      {
+        "name": "BRAIN_POSTGRES_HOST",
+        "description": "PostgreSQL host for production storage"
+      },
+      {
+        "name": "BRAIN_POSTGRES_PASSWORD",
+        "description": "PostgreSQL password"
+      },
+      {
+        "name": "BRAIN_REDIS_HOST",
+        "description": "Redis host for caching"
       }
     ]
   },
-  "requires": {
-    "files": ["clawbrain.py"]
+  "dependencies": {
+    "python": ">=3.10",
+    "pip": {
+      "optional": ["psycopg2-binary", "redis", "cryptography", "sentence-transformers"]
+    }
   },
   "metadata": {
     "clawdbot": {
-      "emoji": "🧠",
-      "requires": {
-        "dirs": ["clawbrain"]
-      }
+      "emoji": "🧠"
+    },
+    "openclaw": {
+      "emoji": "🧠"
     }
   }
 }
