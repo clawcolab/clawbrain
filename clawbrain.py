@@ -13,7 +13,7 @@ Features:
 Supports: SQLite (default), PostgreSQL, Redis
 """
 
-__version__ = "0.1.8"
+__version__ = "0.1.9"
 __author__ = "ClawColab"
 
 import os
@@ -29,6 +29,31 @@ from threading import Lock
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def get_bridge_script_path() -> Optional[str]:
+    """
+    Get the path to brain_bridge.py script.
+    Used by hooks to locate the bridge script at runtime.
+    
+    Returns:
+        Path to brain_bridge.py or None if not found
+    """
+    pkg_dir = Path(__file__).parent
+    
+    # Check multiple possible locations
+    candidates = [
+        pkg_dir / "scripts" / "brain_bridge.py",
+        pkg_dir.parent / "brain" / "scripts" / "brain_bridge.py",
+        pkg_dir.parent / "scripts" / "brain_bridge.py",
+    ]
+    
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    
+    return None
+
 
 # Optional dependencies
 EMBEDDINGS_AVAILABLE = False

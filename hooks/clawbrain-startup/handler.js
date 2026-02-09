@@ -4,10 +4,45 @@
  * Refreshes the ClawBrain memory system on gateway startup
  * and saves session context to brain on /new command.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
+
+// Find brain_bridge.py using Python to locate the package
+function findBridgeScriptViaPython() {
+  try {
+    const result = spawnSync('python3', ['-c', `
+import sys
+try:
+    import clawbrain
+    import os
+    pkg_dir = os.path.dirname(clawbrain.__file__)
+    # Check multiple possible locations
+    candidates = [
+        os.path.join(pkg_dir, 'scripts', 'brain_bridge.py'),
+        os.path.join(os.path.dirname(pkg_dir), 'brain', 'scripts', 'brain_bridge.py'),
+        os.path.join(os.path.dirname(pkg_dir), 'scripts', 'brain_bridge.py'),
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            print(c)
+            sys.exit(0)
+    # Fallback to package dir
+    print(pkg_dir)
+except Exception as e:
+    print('', file=sys.stderr)
+    sys.exit(1)
+`], { encoding: 'utf-8', timeout: 5000 });
+    
+    if (result.status === 0 && result.stdout.trim()) {
+      return result.stdout.trim();
+    }
+  } catch (e) {
+    // Python not available or clawbrain not installed
+  }
+  return null;
+}
 
 // Find brain_bridge.py - check multiple possible locations
 function findBridgeScript() {
@@ -15,17 +50,22 @@ function findBridgeScript() {
   
   // Possible locations for brain_bridge.py
   const possiblePaths = [
-    // Pip installed locations (check site-packages)
-    path.join(home, '.local', 'lib', 'python3.10', 'site-packages', 'brain', 'scripts', 'brain_bridge.py'),
-    path.join(home, '.local', 'lib', 'python3.11', 'site-packages', 'brain', 'scripts', 'brain_bridge.py'),
-    path.join(home, '.local', 'lib', 'python3.12', 'site-packages', 'brain', 'scripts', 'brain_bridge.py'),
-    // Skills directory locations
+    // Skills directory locations (manual/git installs)
     path.join(home, 'clawd', 'skills', 'clawbrain', 'scripts', 'brain_bridge.py'),
     path.join(home, 'clawd', 'skills', 'clawbrain', 'brain', 'scripts', 'brain_bridge.py'),
     path.join(home, '.openclaw', 'skills', 'clawbrain', 'scripts', 'brain_bridge.py'),
     path.join(home, '.openclaw', 'skills', 'clawbrain', 'brain', 'scripts', 'brain_bridge.py'),
     path.join(home, '.clawdbot', 'skills', 'clawbrain', 'scripts', 'brain_bridge.py'),
     path.join(home, '.clawdbot', 'skills', 'clawbrain', 'brain', 'scripts', 'brain_bridge.py'),
+    // Pip installed locations (common paths)
+    path.join(home, '.local', 'lib', 'python3.10', 'site-packages', 'brain', 'scripts', 'brain_bridge.py'),
+    path.join(home, '.local', 'lib', 'python3.11', 'site-packages', 'brain', 'scripts', 'brain_bridge.py'),
+    path.join(home, '.local', 'lib', 'python3.12', 'site-packages', 'brain', 'scripts', 'brain_bridge.py'),
+    path.join(home, '.local', 'lib', 'python3.13', 'site-packages', 'brain', 'scripts', 'brain_bridge.py'),
+    // System site-packages
+    '/usr/local/lib/python3.10/site-packages/brain/scripts/brain_bridge.py',
+    '/usr/local/lib/python3.11/site-packages/brain/scripts/brain_bridge.py',
+    '/usr/local/lib/python3.12/site-packages/brain/scripts/brain_bridge.py',
   ];
   
   for (const p of possiblePaths) {
@@ -34,7 +74,12 @@ function findBridgeScript() {
     }
   }
   
-  // Fallback: try to use python to find it
+  // Fallback: use Python to find it dynamically
+  const pythonPath = findBridgeScriptViaPython();
+  if (pythonPath && fs.existsSync(pythonPath)) {
+    return pythonPath;
+  }
+  
   return null;
 }
 

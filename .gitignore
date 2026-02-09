@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 *.pyo
 brain_data.db
+
+# Build artifacts
+dist/
+*.egg-info/
+build/
