@@ -807,7 +807,7 @@ Documentation: https://github.com/clawcolab/clawbrain
         """
     )
     
-    parser.add_argument("--version", action="version", version="ClawBrain 0.1.9")
+    parser.add_argument("--version", action="version", version="ClawBrain 0.1.10")
     
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     

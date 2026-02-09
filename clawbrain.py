@@ -13,7 +13,7 @@ Features:
 Supports: SQLite (default), PostgreSQL, Redis
 """
 
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 __author__ = "ClawColab"
 
 import os
@@ -41,11 +41,15 @@ def get_bridge_script_path() -> Optional[str]:
     """
     pkg_dir = Path(__file__).parent
     
-    # Check multiple possible locations
+    # Check multiple possible locations depending on install method
     candidates = [
+        # Pip installed: clawbrain.py at dist-packages/, brain at dist-packages/brain/
+        pkg_dir / "brain" / "scripts" / "brain_bridge.py",
+        # Development: clawbrain.py at repo root, scripts at scripts/
         pkg_dir / "scripts" / "brain_bridge.py",
-        pkg_dir.parent / "brain" / "scripts" / "brain_bridge.py",
+        # Legacy: if clawbrain.py is inside brain package
         pkg_dir.parent / "scripts" / "brain_bridge.py",
+        pkg_dir.parent / "brain" / "scripts" / "brain_bridge.py",
     ]
     
     for c in candidates:
