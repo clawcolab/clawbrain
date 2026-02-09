@@ -243,6 +243,15 @@ def cmd_setup(args):
     except Exception as e:
         print(f"   ❌ Test failed: {e}")
     
+    # Check for personality files
+    personality_files_found = False
+    if platform_name != "unknown":
+        personality_files = ["SOUL.md", "IDENTITY.md", "USER.md", "MEMORY.md"]
+        for pf in personality_files:
+            if (config_dir / pf).exists():
+                personality_files_found = True
+                break
+    
     # Summary
     print("\n" + "=" * 40)
     print("✅ Setup complete!")
@@ -262,6 +271,12 @@ def cmd_setup(args):
             print(f"\n⚠️  Found {unencrypted_count} existing unencrypted secret(s)!")
             print("   These were stored before encryption was enabled.")
             print("   Run 'clawbrain migrate-secrets' to encrypt them.")
+    
+    # Suggest personality import
+    if personality_files_found:
+        print(f"\n📄 Found OpenClaw personality files!")
+        print("   Import them to seed ClawBrain's memory:")
+        print("   clawbrain import-personality")
     
     print("\n📚 Documentation: https://github.com/clawcolab/clawbrain")
     
@@ -598,6 +613,182 @@ def cmd_migrate_secrets(args):
         return 1
 
 
+def parse_personality_file(filepath: Path) -> dict:
+    """
+    Parse an OpenClaw personality file (SOUL.md, IDENTITY.md, USER.md, MEMORY.md).
+    
+    Returns dict with:
+        - title: The file type (e.g., "SOUL", "IDENTITY")
+        - content: Full file content
+        - sections: Dict of section_name -> section_content
+    """
+    if not filepath.exists():
+        return None
+    
+    content = filepath.read_text(encoding="utf-8")
+    title = filepath.stem  # SOUL, IDENTITY, USER, MEMORY
+    
+    # Parse sections (## headers)
+    sections = {}
+    current_section = "main"
+    current_content = []
+    
+    for line in content.split("\n"):
+        if line.startswith("## "):
+            # Save previous section
+            if current_content:
+                sections[current_section] = "\n".join(current_content).strip()
+            current_section = line[3:].strip()
+            current_content = []
+        else:
+            current_content.append(line)
+    
+    # Save last section
+    if current_content:
+        sections[current_section] = "\n".join(current_content).strip()
+    
+    return {
+        "title": title,
+        "filename": filepath.name,
+        "content": content,
+        "sections": sections
+    }
+
+
+def cmd_import_personality(args):
+    """Import OpenClaw personality files into ClawBrain memories."""
+    print("📥 Import OpenClaw Personality Files")
+    print("=" * 40)
+    
+    # Detect or use provided path
+    if args.path:
+        base_path = Path(args.path)
+        if not base_path.exists():
+            print(f"\n❌ Path not found: {args.path}")
+            return 1
+    else:
+        platform_name, config_dir, _ = detect_platform()
+        if platform_name == "unknown":
+            print("\n❌ OpenClaw/ClawdBot not detected.")
+            print("   Use --path to specify the directory containing personality files.")
+            return 1
+        base_path = config_dir
+        print(f"\n📍 Detected: {platform_name}")
+        print(f"📁 Looking in: {base_path}")
+    
+    # Personality files to import
+    personality_files = ["SOUL.md", "IDENTITY.md", "USER.md", "MEMORY.md"]
+    found_files = []
+    
+    print("\n🔍 Scanning for personality files...")
+    
+    for filename in personality_files:
+        filepath = base_path / filename
+        if filepath.exists():
+            parsed = parse_personality_file(filepath)
+            if parsed:
+                found_files.append(parsed)
+                print(f"   ✅ Found: {filename}")
+        else:
+            print(f"   ⚠️  Not found: {filename}")
+    
+    if not found_files:
+        print("\n❌ No personality files found!")
+        return 1
+    
+    print(f"\n📋 Found {len(found_files)} personality file(s)")
+    
+    # Show what will be imported
+    for pf in found_files:
+        print(f"\n   📄 {pf['filename']}")
+        if pf['sections']:
+            for section_name in list(pf['sections'].keys())[:5]:
+                content_preview = pf['sections'][section_name][:50].replace('\n', ' ')
+                print(f"      • {section_name}: {content_preview}...")
+    
+    if args.dry_run:
+        print("\n🔍 Dry run - no changes made.")
+        return 0
+    
+    # Import into ClawBrain
+    print("\n📦 Importing into ClawBrain...")
+    
+    try:
+        from clawbrain import Brain
+        brain = Brain(agent_id=args.agent)
+        
+        imported_count = 0
+        skipped_count = 0
+        
+        # File type to memory type mapping
+        type_mapping = {
+            "SOUL": "core_identity",
+            "IDENTITY": "personality", 
+            "USER": "user_profile",
+            "MEMORY": "long_term_memory"
+        }
+        
+        for pf in found_files:
+            file_type = pf['title'].upper()
+            memory_type = type_mapping.get(file_type, "personality")
+            
+            # Check if already imported (look for matching memory)
+            if not args.force:
+                existing = brain.recall(
+                    query=f"OpenClaw {file_type} personality file",
+                    limit=1,
+                    memory_type=memory_type
+                )
+                if existing and len(existing) > 0:
+                    # Check if it's our import marker
+                    for mem in existing:
+                        if hasattr(mem, 'metadata') and mem.metadata:
+                            meta = mem.metadata if isinstance(mem.metadata, dict) else {}
+                            if meta.get("source") == f"openclaw_{file_type.lower()}":
+                                print(f"   ⏭️  Skipping {pf['filename']} (already imported)")
+                                skipped_count += 1
+                                continue
+            
+            # Store the full content as a memory
+            memory_id = brain.remember(
+                content=pf['content'],
+                memory_type=memory_type,
+                metadata={
+                    "source": f"openclaw_{file_type.lower()}",
+                    "filename": pf['filename'],
+                    "imported_at": datetime.now().isoformat(),
+                    "sections": list(pf['sections'].keys())
+                }
+            )
+            
+            if memory_id:
+                print(f"   ✅ Imported {pf['filename']} → {memory_type} (ID: {memory_id[:8]}...)")
+                imported_count += 1
+            else:
+                print(f"   ❌ Failed to import {pf['filename']}")
+        
+        brain.close()
+        
+        # Summary
+        print("\n" + "=" * 40)
+        print(f"✅ Import complete!")
+        print(f"   Imported: {imported_count}")
+        print(f"   Skipped:  {skipped_count}")
+        print(f"   Agent ID: {args.agent}")
+        
+        print("\n💡 Use these memories in your agent:")
+        print("   brain.recall('core identity', memory_type='core_identity')")
+        print("   brain.recall('user preferences', memory_type='user_profile')")
+        
+        return 0
+        
+    except Exception as e:
+        print(f"\n❌ Import failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -616,7 +807,7 @@ Documentation: https://github.com/clawcolab/clawbrain
         """
     )
     
-    parser.add_argument("--version", action="version", version="ClawBrain 0.1.7")
+    parser.add_argument("--version", action="version", version="ClawBrain 0.1.8")
     
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
@@ -658,6 +849,14 @@ Documentation: https://github.com/clawcolab/clawbrain
     migrate_parser.add_argument("--dry-run", action="store_true", help="Show what would be migrated without making changes")
     migrate_parser.add_argument("--force", "-f", action="store_true", help="Skip confirmation prompt")
     migrate_parser.set_defaults(func=cmd_migrate_secrets)
+    
+    # import-personality command
+    import_parser = subparsers.add_parser("import-personality", help="Import OpenClaw personality files (SOUL.md, IDENTITY.md, USER.md, MEMORY.md)")
+    import_parser.add_argument("--path", "-p", help="Path to OpenClaw directory (auto-detected if not specified)")
+    import_parser.add_argument("--agent", "-a", default="default", help="Agent ID to store memories under (default: 'default')")
+    import_parser.add_argument("--dry-run", action="store_true", help="Show what would be imported without making changes")
+    import_parser.add_argument("--force", "-f", action="store_true", help="Re-import even if already imported")
+    import_parser.set_defaults(func=cmd_import_personality)
     
     args = parser.parse_args()
     

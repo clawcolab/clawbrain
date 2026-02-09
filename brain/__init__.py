@@ -1,6 +1,6 @@
 """Claw Brain - Brain module"""
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 __author__ = "ClawColab"
 
 import importlib.util
