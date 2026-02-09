@@ -11,34 +11,55 @@ A sophisticated memory and learning system that enables truly personalized AI-hu
 - 💭 **Conversation State** - Real-time mood detection and context tracking
 - 📚 **Learning Insights** - Continuously learns from interactions and corrections
 - 🧠 **get_full_context()** - Everything for personalized responses
+- 🔐 **Encrypted Secrets** - Securely store API keys and credentials
 
 ## Installation
 
-### For ClawdBot / OpenClaw (Recommended)
+### From PyPI (Recommended)
 
-**One-liner install:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/clawcolab/clawbrain/main/remote-install.sh | bash
+# Basic installation
+pip install clawbrain
+
+# With encryption support (recommended)
+pip install clawbrain[encryption]
+
+# With all optional features
+pip install clawbrain[all]
 ```
 
-**Or step-by-step:**
-```bash
-# Clone to your skills directory
-cd ~/.openclaw/skills  # or ~/clawd/skills or ~/.clawdbot/skills
-git clone https://github.com/clawcolab/clawbrain.git
+### Post-Installation Setup
 
-# Run the install script
-cd clawbrain
-./install.sh
+After installation, run the setup command:
+
+```bash
+# Interactive setup (generates encryption key, installs hooks)
+clawbrain setup
+
+# Backup your encryption key (important!)
+clawbrain backup-key --all
 ```
 
-The install script will:
+### For ClawdBot / OpenClaw
+
+```bash
+# Install with all features
+pip install clawbrain[all]
+
+# Run setup to install hooks
+clawbrain setup
+
+# Restart your service
+sudo systemctl restart clawdbot  # or openclaw
+```
+
+The setup command will:
+- Generate a secure encryption key
 - Detect your platform (ClawdBot or OpenClaw)
 - Install the startup hook automatically
-- Check Python dependencies
-- Show you how to configure environment variables
+- Test the installation
 
-**Configure your agent ID** (add to systemd service):
+**Configure your agent ID** (optional, add to systemd service):
 ```bash
 sudo mkdir -p /etc/systemd/system/clawdbot.service.d  # or openclaw.service.d
 sudo tee /etc/systemd/system/clawdbot.service.d/brain.conf << EOF
@@ -52,13 +73,13 @@ sudo systemctl restart clawdbot  # or openclaw
 ### For Python Projects
 
 ```bash
-pip install git+https://github.com/clawcolab/clawbrain.git
+pip install clawbrain[encryption]
 ```
 
 ## Quick Start
 
 ```bash
-pip install git+https://github.com/clawcolab/clawbrain.git
+pip install clawbrain[encryption]
 ```
 
 ```python
@@ -143,10 +164,132 @@ You can also force a specific backend:
 brain = Brain({"storage_backend": "postgresql"})  # Force PostgreSQL
 brain = Brain({"storage_backend": "sqlite"})      # Force SQLite
 ```
+---
 
-## Installation Methods
+## Encrypted Secrets 🔐
 
-### From GitHub (Recommended)
+ClawBrain supports encrypting sensitive data like API keys and credentials.
+
+**Installation:**
+```bash
+pip install clawbrain[encryption]
+```
+
+**Setup:**
+```bash
+# Generate encryption key (done automatically during setup)
+clawbrain setup
+
+# Backup your key (IMPORTANT!)
+clawbrain backup-key --all
+```
+
+**Usage:**
+```python
+from clawbrain import Brain
+
+brain = Brain()
+
+# Store encrypted secret
+brain.remember(
+    agent_id="assistant",
+    memory_type="secret",  # Memory type 'secret' triggers encryption
+    content="sk-1234567890abcdef",
+    key="openai_api_key"
+)
+
+# Retrieve and automatically decrypt
+secrets = brain.recall(agent_id="assistant", memory_type="secret")
+api_key = secrets[0].content  # Automatically decrypted
+```
+
+**Encryption Key Management:**
+
+The encryption key is automatically generated during `clawbrain setup`. Manage it with CLI:
+
+```bash
+# View key info (masked)
+clawbrain show-key
+
+# View full key
+clawbrain show-key --full
+
+# Backup key to file
+clawbrain backup-key --output ~/my_backup.txt
+
+# Backup with QR code (requires: pip install clawbrain[qr])
+clawbrain backup-key --qr
+
+# Copy to clipboard (requires: pip install clawbrain[clipboard])
+clawbrain backup-key --clipboard
+
+# All backup methods
+clawbrain backup-key --all
+```
+
+**Key Storage Locations:**
+- `~/.config/clawbrain/.brain_key` (default)
+- Or set via environment: `BRAIN_ENCRYPTION_KEY`
+
+⚠️ **Important**: Backup your encryption key! Lost keys = lost encrypted data.
+
+---
+
+## CLI Commands
+
+ClawBrain includes a command-line interface for setup and management:
+
+```bash
+# Setup ClawBrain (generate key, install hooks)
+clawbrain setup
+
+# Generate new encryption key
+clawbrain generate-key
+
+# Show current encryption key
+clawbrain show-key --full
+
+# Backup encryption key
+clawbrain backup-key --all
+
+# Check health status
+clawbrain health
+
+# Show installation info
+clawbrain info
+```
+
+---
+
+## Optional Dependencies
+
+Install with specific features:
+
+```bash
+# Encryption only
+pip install clawbrain[encryption]
+
+# PostgreSQL support
+pip install clawbrain[postgres]
+
+# Redis caching
+pip install clawbrain[redis]
+
+# Semantic search
+pip install clawbrain[embeddings]
+
+# QR code key backup
+pip install clawbrain[qr]
+
+# All features
+pip install clawbrain[all]
+```
+
+---
+
+## Development Installation
+
+### From GitHub
 
 ```bash
 pip install git+https://github.com/clawcolab/clawbrain.git
@@ -155,7 +298,7 @@ pip install git+https://github.com/clawcolab/clawbrain.git
 ### From Local Development
 
 ```bash
-cd /root/clawd/brain/public_package
+cd /path/to/clawbrain
 pip install -e .
 ```
 

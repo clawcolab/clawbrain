@@ -1,7 +1,7 @@
 ---
 name: clawbrain
-version: 3.0.0
-description: "Claw Brain - Personal AI Memory System for OpenClaw/ClawDBot. Provides memory, personality, bonding, and learning capabilities. Auto-refreshes on service restart."
+version: 0.1.7
+description: "Claw Brain - Personal AI Memory System for OpenClaw/ClawDBot. Provides memory, personality, bonding, and learning capabilities with encrypted secrets support. Auto-refreshes on service restart."
 metadata: {"openclaw":{"emoji":"🧠","category":"memory","provides":{"slot":"memory"},"events":["gateway:startup","command:new"]},"clawdbot":{"emoji":"🧠","category":"memory","provides":{"slot":"memory"},"events":["gateway:startup","command:new"]}}
 ---
 
@@ -25,22 +25,44 @@ Personal AI Memory System with Soul, Bonding, and Learning for OpenClaw/ClawDBot
 
 ## Quick Install
 
-**One-liner (recommended):**
+### From PyPI (Recommended)
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/clawcolab/clawbrain/main/remote-install.sh | bash
+# Install with all features
+pip install clawbrain[all]
+
+# Run interactive setup
+clawbrain setup
+
+# Backup your encryption key (IMPORTANT!)
+clawbrain backup-key --all
+
+# Restart your service
+sudo systemctl restart clawdbot  # or openclaw
 ```
 
-This will:
+The setup command will:
 1. Detect your platform (ClawdBot or OpenClaw)
-2. Clone to the correct skills directory
+2. Generate a secure encryption key
 3. Install the startup hook automatically
-4. Check Python dependencies
+4. Test the installation
+
+### Alternative: From Source
+
+```bash
+# Clone to your skills directory
+cd ~/.openclaw/skills  # or ~/clawd/skills or ~/.clawdbot/skills
+git clone https://github.com/clawcolab/clawbrain.git
+cd clawbrain
+pip install -e .[all]
+clawbrain setup
+```
 
 ---
 
 ## Configuration
 
-After installation, configure your agent ID:
+After installation, optionally configure your agent ID:
 
 ```bash
 # Create systemd drop-in config
@@ -65,6 +87,7 @@ sudo systemctl restart clawdbot  # or openclaw
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `BRAIN_AGENT_ID` | Unique ID for this agent's memories | `default` |
+| `BRAIN_ENCRYPTION_KEY` | Fernet key for encrypting sensitive data (auto-generated if not set) | - |
 | `BRAIN_POSTGRES_HOST` | PostgreSQL host | `localhost` |
 | `BRAIN_POSTGRES_PASSWORD` | PostgreSQL password | - |
 | `BRAIN_POSTGRES_PORT` | PostgreSQL port | `5432` |
@@ -95,6 +118,61 @@ sudo systemctl restart clawdbot  # or openclaw
 
 ---
 
+## Encrypted Secrets
+
+ClawBrain supports encrypting sensitive data like API keys and credentials.
+
+**Setup:**
+```bash
+# Run setup to generate encryption key
+clawbrain setup
+
+# Backup your key (IMPORTANT!)
+clawbrain backup-key --all
+```
+
+**Usage:**
+```python
+# Store encrypted secret
+brain.remember(
+    agent_id="assistant",
+    memory_type="secret",  # Memory type 'secret' triggers encryption
+    content="sk-1234567890abcdef",
+    key="openai_api_key"
+)
+
+# Retrieve and automatically decrypt
+secrets = brain.recall(agent_id="assistant", memory_type="secret")
+api_key = secrets[0].content  # Automatically decrypted
+```
+
+**Key Management CLI:**
+```bash
+clawbrain show-key          # View key info (masked)
+clawbrain show-key --full   # View full key
+clawbrain backup-key --all  # Backup with all methods
+clawbrain generate-key      # Generate new key
+```
+
+⚠️ **Important**: Backup your encryption key! Lost keys = lost encrypted data.
+
+---
+
+## CLI Commands
+
+ClawBrain includes a command-line interface:
+
+| Command | Description |
+|---------|-------------|
+| `clawbrain setup` | Set up ClawBrain, generate key, install hooks |
+| `clawbrain generate-key` | Generate new encryption key |
+| `clawbrain show-key` | Display current encryption key |
+| `clawbrain backup-key` | Backup key (file, QR, clipboard) |
+| `clawbrain health` | Check health status |
+| `clawbrain info` | Show installation info |
+
+---
+
 ## Hooks
 
 | Event | Action |
@@ -104,9 +182,9 @@ sudo systemctl restart clawdbot  # or openclaw
 
 ---
 
-## Manual Installation
+## Development Installation
 
-If you prefer manual installation:
+For development or manual installation:
 
 ```bash
 # Clone to your skills directory

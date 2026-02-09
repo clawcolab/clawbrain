@@ -8,18 +8,19 @@ Features:
 - 👤 User Profile - Learns preferences, interests, communication style
 - 💭 Conversation State - Real-time mood/intent detection
 - 📚 Learning Insights - Continuous improvement from interactions
+- � Encrypted Secrets - Securely store API keys and credentials
 - 🔄 Auto-Refresh - Automatic memory refresh on OpenClaw restart
 
-Install: pip install git+https://github.com/clawcolab/clawbrain.git
+Install: pip install clawbrain[all]
+Setup:   clawbrain setup
 
-OpenClaw Integration:
-    cd ~/.openclaw/plugins
-    git clone https://github.com/clawcolab/clawbrain.git
-    openclaw config set plugins.entries.clawbrain.enabled true
-    openclaw hooks enable boot-md
+OpenClaw/ClawdBot Integration:
+    pip install clawbrain[all]
+    clawbrain setup
+    sudo systemctl restart clawdbot  # or openclaw
 """
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 __author__ = "ClawColab"
 
 # Core exports

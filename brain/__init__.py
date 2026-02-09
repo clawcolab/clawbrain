@@ -1,6 +1,7 @@
 """Claw Brain - Brain module"""
 
-__version__ = "3.0.0"
+__version__ = "0.1.7"
+__author__ = "ClawColab"
 
 import importlib.util
 import os
@@ -15,4 +16,4 @@ Memory = clawbrain.Memory
 UserProfile = clawbrain.UserProfile
 Embedder = clawbrain.Embedder
 
-__all__ = ["Brain", "Memory", "UserProfile", "Embedder"]
+__all__ = ["Brain", "Memory", "UserProfile", "Embedder", "__version__"]

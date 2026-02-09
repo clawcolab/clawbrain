@@ -1,0 +1,46 @@
+# Test container for ClawBrain integration testing
+# Simulates OpenClaw environment
+
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    nodejs \
+    npm \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create openclaw user and directories (simulating real OpenClaw structure)
+RUN useradd -m -s /bin/bash openclaw && \
+    mkdir -p /home/openclaw/.openclaw/skills && \
+    mkdir -p /home/openclaw/.openclaw/hooks && \
+    mkdir -p /home/openclaw/.openclaw/data && \
+    mkdir -p /home/openclaw/.openclaw/logs && \
+    mkdir -p /home/openclaw/.config/clawbrain && \
+    chown -R openclaw:openclaw /home/openclaw
+
+# Switch to openclaw user
+USER openclaw
+WORKDIR /home/openclaw
+
+# Set up environment
+ENV HOME=/home/openclaw
+ENV PATH="/home/openclaw/.local/bin:$PATH"
+
+# Copy ClawBrain source (will be mounted in test)
+COPY --chown=openclaw:openclaw . /home/openclaw/.openclaw/skills/clawbrain/
+
+# Install ClawBrain with all dependencies
+RUN pip install --user /home/openclaw/.openclaw/skills/clawbrain[all]
+
+# Install hooks to the proper location (simulating clawbrain setup)
+RUN cp -r /home/openclaw/.openclaw/skills/clawbrain/hooks/clawbrain-startup \
+    /home/openclaw/.openclaw/hooks/
+
+# Set working directory for tests
+WORKDIR /home/openclaw/.openclaw/skills/clawbrain
+
+# Default command runs the test suite
+CMD ["python", "-m", "pytest", "tests/", "-v"]

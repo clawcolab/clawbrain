@@ -8,9 +8,13 @@ Features:
 - 💭 Conversation State - Mood/intent detection
 - 📚 Learning Insights - Continuous improvement
 - 🧠 get_full_context() - Everything for personalized responses
+- 🔐 Encrypted Secrets - Securely store sensitive data
 
 Supports: SQLite (default), PostgreSQL, Redis
 """
+
+__version__ = "0.1.7"
+__author__ = "ClawColab"
 
 import os
 import json
@@ -46,6 +50,13 @@ REDIS_AVAILABLE = False
 try:
     import redis
     REDIS_AVAILABLE = True
+except ImportError:
+    pass
+
+CRYPTO_AVAILABLE = False
+try:
+    from cryptography.fernet import Fernet
+    CRYPTO_AVAILABLE = True
 except ImportError:
     pass
 
@@ -105,6 +116,7 @@ DEFAULT_CONFIG = {
     "redis_prefix": os.environ.get("BRAIN_REDIS_PREFIX", "brain:"),
     "embedding_model": os.environ.get("BRAIN_EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
     "backup_dir": os.environ.get("BRAIN_BACKUP_DIR", "./brain_backups"),
+    "encryption_key": os.environ.get("BRAIN_ENCRYPTION_KEY", ""),  # Fernet key for encrypting sensitive data
 }
 
 
@@ -115,7 +127,9 @@ class Brain:
         self._storage = None
         self._redis = None
         self._pg_conn = None
+        self._pending_auto_migrate = False  # Flag for auto-migration
         self._embedder = Embedder(self.config["embedding_model"]) if EMBEDDINGS_AVAILABLE else None
+        self._cipher = self._setup_encryption() if CRYPTO_AVAILABLE else None
         
         # Determine storage backend
         storage = self.config.get("storage_backend", "auto")
@@ -142,6 +156,11 @@ class Brain:
         
         self._backup_dir = Path(self.config["backup_dir"])
         self._backup_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Auto-migrate unencrypted secrets if encryption was just enabled
+        if self._pending_auto_migrate and self._cipher:
+            self._run_auto_migration()
+        
         logger.info(f"Brain initialized with {self._storage} storage")
     
     def _try_postgres(self) -> bool:
@@ -244,6 +263,60 @@ class Brain:
             logger.warning(f"Redis not available: {e}")
             self._redis = None
     
+    def _setup_encryption(self):
+        """Initialize encryption cipher with key from config or environment."""
+        if not CRYPTO_AVAILABLE:
+            logger.warning("cryptography library not installed. Encryption unavailable.")
+            return None
+        
+        newly_generated = False
+        key = self.config.get("encryption_key", "")
+        if not key:
+            # Generate key file path next to database (check config since _storage not set yet)
+            sqlite_path = self.config.get("sqlite_path", "")
+            if sqlite_path:
+                key_path = Path(sqlite_path).parent / ".brain_key"
+            else:
+                key_path = Path.home() / ".config" / "clawbrain" / ".brain_key"
+            
+            key_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Load or generate key
+            if key_path.exists():
+                key = key_path.read_bytes()
+                logger.info(f"Loaded encryption key from {key_path}")
+            else:
+                key = Fernet.generate_key()
+                key_path.write_bytes(key)
+                key_path.chmod(0o600)  # Restrict permissions
+                logger.warning(f"Generated new encryption key at {key_path}")
+                logger.warning("IMPORTANT: Backup this key! Lost keys = lost encrypted data.")
+                newly_generated = True
+        elif isinstance(key, str):
+            key = key.encode()
+        
+        try:
+            cipher = Fernet(key)
+            # Auto-migrate unencrypted secrets when key is first generated
+            if newly_generated:
+                self._pending_auto_migrate = True
+            return cipher
+        except Exception as e:
+            logger.error(f"Failed to initialize encryption: {e}")
+            return None
+    
+    def _encrypt(self, content: str) -> str:
+        """Encrypt content and return base64-encoded encrypted string."""
+        if not self._cipher:
+            raise ValueError("Encryption not available")
+        return self._cipher.encrypt(content.encode()).decode()
+    
+    def _decrypt(self, encrypted_content: str) -> str:
+        """Decrypt base64-encoded encrypted string and return original content."""
+        if not self._cipher:
+            raise ValueError("Decryption not available")
+        return self._cipher.decrypt(encrypted_content.encode()).decode()
+    
     @property
     def storage_backend(self) -> str:
         return self._storage
@@ -281,12 +354,29 @@ class Brain:
                 if len(kw) > 2 and kw.lower() not in final_tags:
                     final_tags.add(kw.lower())
 
+        # Encrypt sensitive content
+        is_encrypted = False
+        stored_content = content
+        if memory_type == "secret" and self._cipher:
+            try:
+                stored_content = self._encrypt(content)
+                is_encrypted = True
+                # Don't generate embeddings for encrypted content
+                embedding = None
+                logger.info(f"Encrypted secret memory: {memory_id}")
+            except Exception as e:
+                logger.error(f"Failed to encrypt content: {e}")
+                raise ValueError("Failed to encrypt sensitive content. Set BRAIN_ENCRYPTION_KEY environment variable.")
+        elif memory_type == "secret" and not self._cipher:
+            raise ValueError("Encryption not available. Install cryptography: pip install cryptography")
+
         memory = Memory(
             id=memory_id, agent_id=agent_id, memory_type=memory_type,
             key=key or f"{memory_type}:{content[:50]}",
-            content=content, content_encrypted=False,
-            summary=self._summarize([{"content": content}]),
-            keywords=keywords, tags=list(final_tags),
+            content=stored_content, content_encrypted=is_encrypted,
+            summary=self._summarize([{"content": content}]) if not is_encrypted else "[Encrypted]",
+            keywords=keywords if not is_encrypted else [],
+            tags=list(final_tags),
             importance=kwargs.get("importance", 5),
             linked_to=kwargs.get("linked_to"), source=kwargs.get("source"),
             embedding=embedding, created_at=now, updated_at=now
@@ -338,6 +428,118 @@ class Brain:
             
             rows = cursor.fetchall()
         return [self._row_to_memory(row) for row in rows]
+
+    def get_unencrypted_secrets(self) -> List[Dict]:
+        """
+        Find all secrets that are stored unencrypted.
+        
+        Returns:
+            List of dicts with id, agent_id, key for unencrypted secrets
+        """
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute(
+                    "SELECT id, agent_id, key FROM memories WHERE memory_type = 'secret' AND content_encrypted = 0"
+                )
+            else:
+                cursor.execute(
+                    "SELECT id, agent_id, key FROM memories WHERE memory_type = 'secret' AND content_encrypted = false"
+                )
+            rows = cursor.fetchall()
+        
+        return [{"id": row["id"], "agent_id": row["agent_id"], "key": row["key"]} for row in rows]
+
+    def migrate_secrets(self, dry_run: bool = False) -> Dict[str, Any]:
+        """
+        Migrate unencrypted secrets to encrypted storage.
+        
+        Args:
+            dry_run: If True, only report what would be migrated without making changes
+            
+        Returns:
+            Dict with migration results: {"total": N, "migrated": N, "failed": N, "errors": [...]}
+        """
+        if not self._cipher:
+            return {
+                "total": 0,
+                "migrated": 0,
+                "failed": 0,
+                "errors": ["Encryption not available. Install cryptography: pip install cryptography"]
+            }
+        
+        results = {"total": 0, "migrated": 0, "failed": 0, "errors": [], "dry_run": dry_run}
+        
+        with self._get_cursor() as cursor:
+            # Find all unencrypted secrets
+            if self._storage == "sqlite":
+                cursor.execute(
+                    "SELECT id, agent_id, key, content FROM memories WHERE memory_type = 'secret' AND content_encrypted = 0"
+                )
+            else:
+                cursor.execute(
+                    "SELECT id, agent_id, key, content FROM memories WHERE memory_type = 'secret' AND content_encrypted = false"
+                )
+            
+            rows = cursor.fetchall()
+            results["total"] = len(rows)
+            
+            if dry_run:
+                logger.info(f"[DRY RUN] Would migrate {len(rows)} unencrypted secrets")
+                return results
+            
+            now = datetime.now().isoformat()
+            
+            for row in rows:
+                try:
+                    # Encrypt the content
+                    encrypted_content = self._encrypt(row["content"])
+                    
+                    # Update the record
+                    if self._storage == "sqlite":
+                        cursor.execute(
+                            "UPDATE memories SET content = ?, content_encrypted = 1, summary = '[Encrypted]', keywords = '[]', updated_at = ? WHERE id = ?",
+                            (encrypted_content, now, row["id"])
+                        )
+                    else:
+                        cursor.execute(
+                            "UPDATE memories SET content = %s, content_encrypted = true, summary = '[Encrypted]', keywords = '[]', updated_at = %s WHERE id = %s",
+                            (encrypted_content, now, row["id"])
+                        )
+                    
+                    results["migrated"] += 1
+                    logger.info(f"Migrated secret: {row['id']} (key: {row['key']})")
+                    
+                except Exception as e:
+                    results["failed"] += 1
+                    error_msg = f"Failed to migrate {row['id']}: {str(e)}"
+                    results["errors"].append(error_msg)
+                    logger.error(error_msg)
+        
+        logger.info(f"Migration complete: {results['migrated']}/{results['total']} secrets encrypted")
+        return results
+
+    def _run_auto_migration(self):
+        """
+        Automatically migrate unencrypted secrets when encryption is first enabled.
+        Called during Brain initialization when a new encryption key is generated.
+        """
+        try:
+            unencrypted = self.get_unencrypted_secrets()
+            if not unencrypted:
+                logger.info("No unencrypted secrets found - nothing to migrate")
+                return
+            
+            logger.warning(f"Found {len(unencrypted)} unencrypted secrets - auto-migrating...")
+            result = self.migrate_secrets(dry_run=False)
+            
+            if result["migrated"] > 0:
+                logger.info(f"Auto-migration complete: {result['migrated']} secrets encrypted")
+            if result["failed"] > 0:
+                logger.error(f"Auto-migration had {result['failed']} failures: {result['errors']}")
+        except Exception as e:
+            logger.error(f"Auto-migration failed: {e}")
+        finally:
+            self._pending_auto_migrate = False
 
     def search_by_tags(self, tags: List[str], agent_id: str = None, memory_type: str = None,
                        match: str = "OR", limit: int = 20) -> List[Memory]:
@@ -701,9 +903,19 @@ class Brain:
         if hasattr(updated_at, 'isoformat'):
             updated_at = updated_at.isoformat()
 
+        # Decrypt content if encrypted
+        content = row["content"]
+        is_encrypted = bool(row["content_encrypted"])
+        if is_encrypted and self._cipher:
+            try:
+                content = self._decrypt(content)
+            except Exception as e:
+                logger.error(f"Failed to decrypt memory {row['id']}: {e}")
+                content = "[Decryption Failed]"
+
         return Memory(
             id=row["id"], agent_id=row["agent_id"], memory_type=row["memory_type"],
-            key=row["key"], content=row["content"], content_encrypted=bool(row["content_encrypted"]),
+            key=row["key"], content=content, content_encrypted=is_encrypted,
             summary=row["summary"], keywords=keywords, tags=tags,
             importance=row["importance"], linked_to=row["linked_to"], source=row["source"],
             embedding=embedding,

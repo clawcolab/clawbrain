@@ -1,0 +1,39 @@
+# MANIFEST.in - Include non-Python files in the distribution
+
+# Include documentation
+include README.md
+include CHANGELOG.md
+include SKILL.md
+include SECURITY_FIXES.md
+include LICENSE
+
+# Include configuration files
+include pyproject.toml
+include skill.json
+
+# Include hooks for ClawdBot/OpenClaw integration (in brain package)
+recursive-include brain/hooks *.js *.md *.json
+
+# Include scripts (in brain package)
+recursive-include brain/scripts *.py
+
+# Include brain module
+recursive-include brain *.py *.md
+
+# Also include root-level hooks and scripts for development installs
+recursive-include hooks *.js *.md *.json
+recursive-include scripts *.py
+
+# Exclude development/test files
+exclude test_encryption.py
+exclude install.sh
+exclude remote-install.sh
+exclude .gitignore
+exclude .git
+
+# Exclude cache and build artifacts
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so
+global-exclude .DS_Store
+global-exclude *.egg-info
