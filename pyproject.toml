@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clawbrain"
-version = "0.1.10"
+version = "0.1.11"
 description = "ClawBrain - Personal AI Memory System for AI Agents with encrypted secrets support"
 readme = "README.md"
 license = {text = "MIT"}

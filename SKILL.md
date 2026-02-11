@@ -1,6 +1,6 @@
 ---
 name: clawbrain
-version: 0.1.10
+version: 0.1.11
 description: "Claw Brain - Personal AI Memory System for OpenClaw/ClawDBot. Provides memory, personality, bonding, and learning capabilities with encrypted secrets support. Auto-refreshes on service restart."
 metadata: {"openclaw":{"emoji":"🧠","category":"memory","provides":{"slot":"memory"},"events":["gateway:startup","command:new"]},"clawdbot":{"emoji":"🧠","category":"memory","provides":{"slot":"memory"},"events":["gateway:startup","command:new"]}}
 ---
@@ -23,9 +23,43 @@ Personal AI Memory System with Soul, Bonding, and Learning for OpenClaw/ClawDBot
 
 ---
 
+## Security & Transparency
+
+ClawBrain handles sensitive data and requires certain permissions. Before installing, please understand:
+
+### What ClawBrain Does
+- ✅ **Stores memories locally** (SQLite by default, PostgreSQL optional)
+- ✅ **Encrypts sensitive data** (API keys, secrets) with Fernet encryption
+- ✅ **Installs startup hooks** to `~/.openclaw/hooks` or `~/.clawdbot/hooks`
+- ✅ **Manages encryption keys** at `~/.config/clawbrain/.brain_key`
+
+### What ClawBrain Does NOT Do
+- ❌ **No telemetry** - Does not phone home or collect usage data
+- ❌ **No external calls** - Only connects to PostgreSQL/Redis if you configure them
+- ❌ **No sudo required** - All operations in your home directory
+- ❌ **No code execution** - Does not download or run remote code after install
+
+### Security Features
+- 🔒 **Encryption Key CLI**: Can display full key for backup (with warnings)
+- 🔍 **Auditable**: All code is open source and reviewable
+- 📋 **Documented Permissions**: See [SECURITY.md](SECURITY.md) for full details
+
+**⚠️ Important**: The CLI command `clawbrain show-key --full` displays your complete encryption key for backup purposes. Treat this key like a password!
+
+**📖 Full Security Documentation**: See [SECURITY.md](SECURITY.md) for:
+- Threat model and protections
+- Key management best practices
+- What install scripts do
+- Permissions required
+- Network access (optional PostgreSQL/Redis)
+
+---
+
 ## Quick Install
 
-### From PyPI (Recommended)
+> **Security Note**: We recommend reviewing [SECURITY.md](SECURITY.md) before installation, especially for production use.
+
+### From PyPI (Recommended - Most Secure)
 
 ```bash
 # Install with all features
@@ -47,16 +81,23 @@ The setup command will:
 3. Install the startup hook automatically
 4. Test the installation
 
-### Alternative: From Source
+### Alternative: From Source (Auditable)
 
 ```bash
 # Clone to your skills directory
 cd ~/.openclaw/skills  # or ~/clawd/skills or ~/.clawdbot/skills
 git clone https://github.com/clawcolab/clawbrain.git
 cd clawbrain
+
+# RECOMMENDED: Review install.sh and hook code before running
+cat install.sh
+cat hooks/clawbrain-startup/handler.js
+
 pip install -e .[all]
 clawbrain setup
 ```
+
+**Why from source?** Full transparency - you can review all code before installation.
 
 ---
 
@@ -120,7 +161,13 @@ sudo systemctl restart clawdbot  # or openclaw
 
 ## Encrypted Secrets
 
-ClawBrain supports encrypting sensitive data like API keys and credentials.
+ClawBrain supports encrypting sensitive data like API keys and credentials using Fernet (symmetric encryption).
+
+**Security Model:**
+- 🔐 Encryption key stored at `~/.config/clawbrain/.brain_key` (chmod 600)
+- 🔑 Only memories with `memory_type='secret'` are encrypted
+- 📦 Encrypted data stored in database, unreadable without key
+- ⚠️ If key is lost, encrypted data cannot be recovered
 
 **Setup:**
 ```bash

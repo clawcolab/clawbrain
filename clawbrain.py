@@ -13,7 +13,7 @@ Features:
 Supports: SQLite (default), PostgreSQL, Redis
 """
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"
 __author__ = "ClawColab"
 
 import os

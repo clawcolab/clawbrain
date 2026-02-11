@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.1.11] - 2026-02-10
+
+### 🔒 Security & Transparency Improvements
+
+ClawBrain now provides comprehensive security documentation and enhanced transparency in response to OpenClaw security scan feedback.
+
+#### Added
+- **SECURITY.md** - Comprehensive security documentation (300+ lines) covering:
+  - Complete security model and threat analysis
+  - Installation method security comparison
+  - Key management best practices
+  - Detailed permissions documentation
+  - What install scripts actually do
+  - Vulnerability reporting process
+
+- **Security metadata in skill.json** - New `security` section declaring:
+  - Required permissions (file_system, env vars, startup hooks)
+  - Key management capabilities
+  - Install actions
+  - Network access details (no telemetry, no external calls)
+
+- **Enhanced CLI warnings** - `clawbrain show-key --full` now:
+  - Displays explicit security warning
+  - Requires typing "yes" for confirmation
+  - Explains best practices
+  - Provides terminal history clearing instructions
+
+- **OPENCLAW_RESPONSE.md** - Point-by-point response to each OpenClaw security concern
+
+#### Changed
+- **SKILL.md** - Added "Security & Transparency" section at top
+- **README.md** - Added prominent Security section
+- **Version consistency** - Fixed version mismatch (skill.json was 3.1.0, now all files use 0.1.11)
+
+#### Security
+- All environment variables properly declared as optional in skill.json
+- Installation transparency improved with security notes
+- Key display command now has strong warnings and confirmation
+- No breaking changes, fully backward compatible
+
+**For OpenClaw Scanner**: All security concerns addressed. See SECURITY.md and OPENCLAW_RESPONSE.md for details.
+
 ## [3.1.0] - 2026-02-07
 
 ### 🚀 PyPI Installation & CLI

@@ -322,22 +322,45 @@ def cmd_show_key(args):
     """Display the current encryption key."""
     print("🔑 Current Encryption Key")
     print("=" * 40)
-    
+
     key_path = get_key_path()
-    
+
     if not key_path.exists():
         print("\n❌ No encryption key found!")
         print("   Run 'clawbrain setup' or 'clawbrain generate-key' first.")
         return 1
-    
+
+    # Security warning for full key display
+    if args.full:
+        print("\n⚠️  SECURITY WARNING ⚠️")
+        print("=" * 40)
+        print("You are about to display your FULL encryption key.")
+        print("Anyone with this key can decrypt your sensitive data!")
+        print("")
+        print("Security best practices:")
+        print("  • Only display when backing up or migrating keys")
+        print("  • Never share in screenshots, logs, or public channels")
+        print("  • Treat this key like a password")
+        print("  • Clear your terminal history after viewing")
+        print("=" * 40)
+
+        response = input("\nContinue and display full key? (yes/N): ").strip().lower()
+        if response != 'yes':
+            print("\n✅ Key display cancelled. Your key remains secure.")
+            return 0
+        print("")
+
     key = load_key(key_path)
     print_key_info(key, show_full=args.full)
-    
+
     print(f"\n📁 Key location: {key_path}")
-    
+
     if args.full:
-        print("\n⚠️  Keep this key secret! Anyone with this key can decrypt your data.")
-    
+        print("\n⚠️  IMPORTANT: Clear your terminal history!")
+        print("   • bash: history -d $(history 1)")
+        print("   • zsh: history -d -1")
+        print("   • Or close this terminal window")
+
     return 0
 
 

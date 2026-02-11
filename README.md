@@ -13,6 +13,20 @@ A sophisticated memory and learning system that enables truly personalized AI-hu
 - 🧠 **get_full_context()** - Everything for personalized responses
 - 🔐 **Encrypted Secrets** - Securely store API keys and credentials
 
+## Security
+
+ClawBrain handles sensitive data responsibly:
+- ✅ Local-only storage (SQLite by default)
+- ✅ Fernet encryption for secrets
+- ✅ No telemetry or external calls
+- ✅ Auditable open-source code
+
+**📖 Full security documentation**: See [SECURITY.md](SECURITY.md) for details on:
+- What permissions are required
+- Key management best practices
+- What install scripts do
+- Threat model and protections
+
 ## Installation
 
 ### From PyPI (Recommended)
