@@ -18,7 +18,24 @@ ClawBrain is a personal AI memory system that handles sensitive data including e
 - **No Telemetry**: Does not phone home or send usage data anywhere
 - **No External APIs**: Does not make network calls except to configured PostgreSQL/Redis backends
 - **No Code Execution**: Does not download or execute remote code after installation
-- **No Sudo Required**: Installation and operation never require root privileges
+
+### No Sudo Required (Core Installation)
+
+**Core installation and operation never require root privileges:**
+
+✅ **Without sudo**:
+- `pip install clawbrain[all]` - Package installation
+- `clawbrain setup` - Generates key, installs hooks to `~/.openclaw/hooks`
+- All operations in user's home directory
+- Default SQLite storage
+- Auto-generated encryption key at `~/.config/clawbrain/.brain_key`
+
+⚠️ **Sudo only needed for optional systemd configuration**:
+- Setting environment variables via systemd drop-ins (`/etc/systemd/system/`)
+- **Alternative**: Use shell environment variables instead (no sudo)
+- **Not required**: ClawBrain works with zero configuration
+
+**If you see sudo in documentation, it's only for optional systemd env var configuration, not core functionality.**
 
 ## Installation Security
 
@@ -124,7 +141,7 @@ ClawBrain only makes network connections if you explicitly configure them:
 
 ### Environment Variables
 
-ClawBrain reads these environment variables (all optional):
+ClawBrain reads these environment variables (**all optional** - works with zero config):
 
 | Variable | Purpose | Default | Sensitive? |
 |----------|---------|---------|------------|
@@ -134,7 +151,10 @@ ClawBrain reads these environment variables (all optional):
 | `BRAIN_POSTGRES_PASSWORD` | PostgreSQL password | None | **YES** |
 | `BRAIN_REDIS_HOST` | Redis host | None | No |
 
-**Recommendation**: Use systemd drop-in files or secure env management, not shell rc files.
+**How to Set** (choose one):
+1. **Shell environment** (no sudo): Add to `~/.bashrc` or `~/.zshrc`
+2. **Systemd drop-in** (requires sudo): Create `/etc/systemd/system/{service}.service.d/brain.conf`
+3. **Don't set anything**: ClawBrain works with defaults (SQLite + auto-generated key)
 
 ## Startup Hooks
 

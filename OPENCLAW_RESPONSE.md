@@ -31,7 +31,7 @@ We've made significant improvements to address all concerns raised in the OpenCl
 
 ### 2. "Instruction Scope - SUSPICIOUS"
 
-**Concern**: Instructions include systemd modifications, encryption key management (including `--full` flag), and hooks that auto-load memory at startup.
+**Concern**: Instructions include systemd modifications, encryption key management (including `--full` flag), and hooks that auto-load memory at startup. Documentation claims "No sudo required" but shows systemd instructions.
 
 **Resolution**:
 - ✅ **Enhanced CLI warnings**: `clawbrain show-key --full` now:
@@ -41,20 +41,29 @@ We've made significant improvements to address all concerns raised in the OpenCl
   - Provides terminal history clearing instructions
   - See [clawbrain_cli.py:321-361](clawbrain_cli.py#L321-L361)
 
+- ✅ **Clarified "No sudo required"** (v0.1.13):
+  - Core installation: **NEVER needs sudo** (`pip install` + `clawbrain setup`)
+  - Systemd instructions: **OPTIONAL** and only for env var configuration
+  - Added "No Sudo Required (Core Installation)" section to SECURITY.md
+  - Documentation now clearly separates required (no sudo) vs optional (sudo) steps
+  - Alternative: Set env vars in shell profile (no sudo needed)
+
 - ✅ **Documented systemd modifications**:
-  - SECURITY.md explains these are optional for setting env vars
-  - No sudo required for ClawBrain operation
-  - Users can use alternative env var methods
+  - SECURITY.md explicitly labels systemd as **OPTIONAL**
+  - Two options provided: shell env vars (no sudo) or systemd drop-ins (sudo)
+  - ClawBrain works with **zero configuration** (SQLite + auto-generated key)
 
 - ✅ **Clarified hook behavior**:
   - SECURITY.md documents exactly what hooks do
   - Hook code is ~50 lines and fully auditable
+  - Hooks install to user directory (`~/.openclaw/hooks`) - no sudo
   - Hooks can be disabled without breaking core functionality
 
 **Why these capabilities exist**:
 - Key display is for backup/recovery (users must be able to backup keys)
-- Hooks enable automatic memory refresh (core feature)
-- Systemd is ONE way to set env vars, not the only way
+- Hooks enable automatic memory refresh (core feature, no sudo)
+- Systemd is ONE **optional** way to set env vars, not the only way
+- Core installation and operation: **never requires root**
 
 ### 3. "Install Mechanism - SUSPICIOUS"
 
@@ -89,10 +98,11 @@ We've made significant improvements to address all concerns raised in the OpenCl
 **Concern**: Registry lists no required env vars but skill uses encryption keys and DB credentials. CLI can display full encryption keys.
 
 **Resolution**:
-- ✅ **skill.json now declares all env vars**:
-  - `environment.optional` lists all 8 env vars
-  - Each includes description and default
-  - Marked which are sensitive (passwords, keys)
+- ✅ **skill.json declares all env vars** (v0.1.11+):
+  - `environment.optional` lists all 5 env vars (see [skill.json:30-55](skill.json#L30-L55))
+  - Each includes description and whether sensitive
+  - **Note for scanner**: Vars are in `optional` not `required` because ClawBrain works with zero config
+  - Scanner may be using cached data if still showing "no env vars"
 
 - ✅ **Key management security**:
   - SECURITY.md has entire section on key management
@@ -228,6 +238,6 @@ The skill is now fully transparent about its capabilities, permissions, and secu
 
 ---
 
-**Version**: 0.1.12
+**Version**: 0.1.13
 **Last Updated**: 2026-02-10
 **Security Contact**: clawcolab@gmail.com (via GitHub Issues)

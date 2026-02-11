@@ -1,6 +1,6 @@
 ---
 name: clawbrain
-version: 0.1.12
+version: 0.1.13
 description: "Claw Brain - Personal AI Memory System for OpenClaw/ClawDBot. Provides memory, personality, bonding, and learning capabilities with encrypted secrets support. Auto-refreshes on service restart."
 metadata: {"openclaw":{"emoji":"🧠","category":"memory","provides":{"slot":"memory"},"events":["gateway:startup","command:new"]},"clawdbot":{"emoji":"🧠","category":"memory","provides":{"slot":"memory"},"events":["gateway:startup","command:new"]}}
 ---
@@ -103,26 +103,38 @@ clawbrain setup
 
 ---
 
-## Configuration
+## Configuration (Optional)
 
-After installation, optionally configure your agent ID:
+**Note**: Configuration is **completely optional**. ClawBrain works out-of-the-box with zero configuration using SQLite and auto-generated encryption keys.
+
+If you want to customize agent ID or use PostgreSQL/Redis, you have two options:
+
+### Option 1: Environment Variables (No sudo)
+
+Set environment variables in your shell profile:
 
 ```bash
-# Create systemd drop-in config
-sudo mkdir -p /etc/systemd/system/clawdbot.service.d  # or openclaw.service.d
+# Add to ~/.bashrc or ~/.zshrc (no sudo required)
+export BRAIN_AGENT_ID="your-agent-name"
+# export BRAIN_POSTGRES_HOST="localhost"  # Optional
+# export BRAIN_REDIS_HOST="localhost"      # Optional
+```
+
+### Option 2: Systemd Drop-in (Requires sudo)
+
+**⚠️ Only if you use systemd services**:
+
+```bash
+# Create systemd drop-in config (requires sudo)
+sudo mkdir -p /etc/systemd/system/clawdbot.service.d
 
 sudo tee /etc/systemd/system/clawdbot.service.d/brain.conf << EOF
 [Service]
 Environment="BRAIN_AGENT_ID=your-agent-name"
-# Optional: PostgreSQL (for production)
-# Environment="BRAIN_POSTGRES_HOST=localhost"
-# Environment="BRAIN_POSTGRES_PASSWORD=your-password"
-# Optional: Redis (for caching)
-# Environment="BRAIN_REDIS_HOST=localhost"
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl restart clawdbot  # or openclaw
+sudo systemctl restart clawdbot
 ```
 
 ### Environment Variables

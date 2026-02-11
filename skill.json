@@ -1,6 +1,6 @@
 {
   "name": "clawbrain",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Personal AI Memory System - remembers conversations, learns preferences, provides personalized context, and securely stores encrypted secrets",
   "author": "ClawColab",
   "homepage": "https://github.com/clawcolab/clawbrain",

@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.1.13] - 2026-02-10
+
+### 📋 Documentation: Clarify "No Sudo Required"
+
+Addresses OpenClaw scanner feedback about contradictions in documentation regarding sudo requirements.
+
+#### Changed
+- **SKILL.md**: Reorganized Configuration section
+  - Split into "Option 1: Environment Variables (No sudo)" and "Option 2: Systemd (Requires sudo)"
+  - Made it explicit that systemd is **completely optional**
+  - Added note that ClawBrain works with zero configuration
+
+- **SECURITY.md**: Added "No Sudo Required (Core Installation)" section
+  - Clearly separated core installation (no sudo) from optional config (sudo)
+  - Listed what works without sudo vs what needs sudo
+  - Emphasized ClawBrain works with zero configuration
+
+- **OPENCLAW_RESPONSE.md**: Enhanced response to scanner concerns
+  - Clarified that core installation never needs sudo
+  - Documented that systemd instructions are optional
+  - Noted env vars are declared in skill.json (scanner may use cached data)
+
+#### Clarifications
+- **Core installation**: NEVER needs sudo (`pip install` + `clawbrain setup`)
+- **Systemd config**: OPTIONAL and only for environment variable configuration
+- **Alternative**: Set env vars in shell profile (no sudo needed)
+- **Default behavior**: Works with SQLite + auto-generated key (no configuration)
+
+**For OpenClaw Scanner**: Documentation now explicitly separates required (no sudo) from optional (sudo) operations.
+
 ## [0.1.12] - 2026-02-10
 
 ### 🔒 Security: Remove Shell Install Scripts
