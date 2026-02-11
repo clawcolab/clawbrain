@@ -1,16 +1,36 @@
 # Changelog
 
+## [0.1.12] - 2026-02-10
+
+### 🔒 Security: Remove Shell Install Scripts
+
+**BREAKING SECURITY IMPROVEMENT**: Removed install.sh and remote-install.sh to eliminate shell script execution pattern.
+
+#### Removed
+- **install.sh** (87 lines) - Redundant with `clawbrain setup` CLI
+- **remote-install.sh** (87 lines) - Security-concerning "curl | bash" pattern
+- **skill.json install.script and install.remote** - Removed from metadata
+
+#### Rationale
+- CLI (`clawbrain setup`) provides all functionality of install.sh
+- Eliminates "curl | bash" security anti-pattern
+- Removes shell script parsing vulnerabilities
+- Simplifies auditing (Python-only, no bash)
+- Addresses OpenClaw scanner concerns about install scripts
+
+#### Installation Now
+```bash
+pip install clawbrain[all]  # PyPI, checksummed
+clawbrain setup              # Python CLI, fully auditable
+```
+
+**Impact**: More secure, easier to audit, no functional changes.
+
 ## [0.1.11] - 2026-02-10
 
 ### 🔒 Security & Transparency Improvements
 
 ClawBrain now provides comprehensive security documentation and enhanced transparency in response to OpenClaw security scan feedback.
-
-#### Removed (Security Improvement)
-- **install.sh** - Redundant with `clawbrain setup` CLI, removed to eliminate shell script execution
-- **remote-install.sh** - Removed security-concerning "curl | bash" pattern
-- **skill.json install.script and install.remote** - Removed from metadata
-- Installation now **exclusively** via `pip install` + `clawbrain setup` CLI
 
 #### Added
 - **SECURITY.md** - Comprehensive security documentation (300+ lines) covering:

@@ -228,6 +228,6 @@ The skill is now fully transparent about its capabilities, permissions, and secu
 
 ---
 
-**Version**: 0.1.11
+**Version**: 0.1.12
 **Last Updated**: 2026-02-10
 **Security Contact**: clawcolab@gmail.com (via GitHub Issues)
