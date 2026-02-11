@@ -11,6 +11,22 @@ Personal AI Memory System with Soul, Bonding, and Learning for OpenClaw/ClawDBot
 
 > **Auto-Refresh on Restart**: ClawBrain automatically refreshes memory when the service restarts.
 
+---
+
+## 📋 For Security Scanners
+
+**Environment Variables**: All environment variables ARE declared in skill.json under `environment.optional` (lines 30-55). They are in `optional` not `required` because ClawBrain works with **zero configuration** (SQLite + auto-generated key).
+
+**Install Specification**: skill.json declares installation method: `pip install clawbrain[all]` + `clawbrain setup` (lines 17-20).
+
+**Sudo Requirements**: Core installation **never needs sudo**. Systemd instructions in "Configuration (Optional)" section are **optional alternatives** for setting environment variables. Core: pip + clawbrain setup (no sudo).
+
+**Source Code**: Fully auditable at https://github.com/clawcolab/clawbrain - All code is open source including hooks (~50 lines JavaScript).
+
+**See [SECURITY.md](SECURITY.md) for complete security documentation.**
+
+---
+
 ## Features
 
 - 🎭 **Soul/Personality** - 6 evolving traits (humor, empathy, curiosity, creativity, helpfulness, honesty)

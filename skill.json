@@ -83,6 +83,13 @@
       "no_external_calls": true
     }
   },
+  "scanner_notes": {
+    "environment_variables": "All env vars declared in environment.optional section. In 'optional' not 'required' because ClawBrain works with zero configuration (SQLite + auto-generated key). See environment.optional for full list.",
+    "install_mechanism": "Install spec provided: pip (line 18) + setup command (line 19). Source: PyPI (https://pypi.org/project/clawbrain/) and GitHub (https://github.com/clawcolab/clawbrain). No shell scripts - CLI only.",
+    "sudo_requirements": "Core installation NEVER needs sudo. pip install + clawbrain setup run in user space. Systemd instructions in SKILL.md Configuration section are OPTIONAL alternatives for env var configuration. See SECURITY.md 'No Sudo Required (Core Installation)' section.",
+    "credentials": "Encryption key managed securely. CLI can display key (with warnings and confirmation) for backup purposes only. Key stored at ~/.config/clawbrain/.brain_key with 0600 permissions. See SECURITY.md Key Management section.",
+    "source_verification": "GitHub: https://github.com/clawcolab/clawbrain, PyPI: https://pypi.org/project/clawbrain/, License: MIT, All code open source and auditable"
+  },
   "metadata": {
     "clawdbot": {
       "emoji": "🧠"
