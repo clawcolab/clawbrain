@@ -61,33 +61,28 @@ We've made significant improvements to address all concerns raised in the OpenCl
 **Concern**: Presence of install.sh and remote-install.sh scripts that may perform system-level changes.
 
 **Resolution**:
-- ✅ **SECURITY.md documents all install methods**:
-  - PyPI (most secure) - no shell scripts
-  - Git clone (auditable) - review before running
-  - Remote install (least secure) - includes warnings
+- ✅ **REMOVED shell scripts entirely** (v0.1.11+):
+  - Deleted `install.sh` and `remote-install.sh`
+  - Replaced with CLI-only installation: `clawbrain setup`
+  - No shell script execution required
 
-- ✅ **Documented what install.sh does**:
-  - Copies hooks to user config directory
-  - Checks dependencies (warnings only, no installs)
-  - Tests installation
-  - NO sudo, NO system modifications, NO remote downloads
+- ✅ **CLI-based installation only**:
+  - `pip install clawbrain[all]` (PyPI, checksummed)
+  - `clawbrain setup` (Python CLI, no bash)
+  - Fully auditable Python code
+  - No arbitrary shell execution
 
-- ✅ **remote-install.sh transparency**:
-  - Already includes security warnings
-  - Requires user confirmation
-  - Shows commit hash for verification
-  - Recommends manual install for production
+- ✅ **Security improvements**:
+  - Eliminates "curl | bash" pattern entirely
+  - No shell script parsing vulnerabilities
+  - Standard Python package installation only
+  - Transparent CLI source code
 
-**Install script audit**:
-```bash
-# install.sh (87 lines) does:
-# 1. Detect platform (ClawdBot/OpenClaw)
-# 2. mkdir -p ~/.openclaw/hooks/clawbrain-startup
-# 3. cp hooks/* to hooks directory
-# 4. Check Python imports (no pip install)
-# 5. Test with brain_bridge.py
-# NO sudo, NO system files, NO downloads
-```
+**Why this is better**:
+- No shell scripts to audit
+- No remote script execution
+- Standard pip workflow only
+- CLI source is part of the package (fully reviewable)
 
 ### 4. "Credentials - SUSPICIOUS"
 

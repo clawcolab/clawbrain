@@ -89,11 +89,13 @@ cd ~/.openclaw/skills  # or ~/clawd/skills or ~/.clawdbot/skills
 git clone https://github.com/clawcolab/clawbrain.git
 cd clawbrain
 
-# RECOMMENDED: Review install.sh and hook code before running
-cat install.sh
+# RECOMMENDED: Review hook code before installation
 cat hooks/clawbrain-startup/handler.js
 
+# Install in development mode
 pip install -e .[all]
+
+# Run setup to install hooks and generate encryption key
 clawbrain setup
 ```
 
@@ -238,7 +240,12 @@ For development or manual installation:
 cd ~/.openclaw/skills  # or ~/clawd/skills or ~/.clawdbot/skills
 git clone https://github.com/clawcolab/clawbrain.git
 cd clawbrain
-./install.sh
+
+# Install in development mode
+pip install -e .[all]
+
+# Run setup
+clawbrain setup
 ```
 
 ---

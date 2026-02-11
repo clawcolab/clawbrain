@@ -6,6 +6,12 @@
 
 ClawBrain now provides comprehensive security documentation and enhanced transparency in response to OpenClaw security scan feedback.
 
+#### Removed (Security Improvement)
+- **install.sh** - Redundant with `clawbrain setup` CLI, removed to eliminate shell script execution
+- **remote-install.sh** - Removed security-concerning "curl | bash" pattern
+- **skill.json install.script and install.remote** - Removed from metadata
+- Installation now **exclusively** via `pip install` + `clawbrain setup` CLI
+
 #### Added
 - **SECURITY.md** - Comprehensive security documentation (300+ lines) covering:
   - Complete security model and threat analysis

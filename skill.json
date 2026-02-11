@@ -16,9 +16,7 @@
   },
   "install": {
     "pip": "pip install clawbrain[all]",
-    "setup": "clawbrain setup",
-    "script": "./install.sh",
-    "remote": "curl -fsSL https://raw.githubusercontent.com/clawcolab/clawbrain/main/remote-install.sh | bash"
+    "setup": "clawbrain setup"
   },
   "hooks": [
     {

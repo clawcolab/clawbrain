@@ -26,46 +26,39 @@ ClawBrain is a personal AI memory system that handles sensitive data including e
 
 We recommend these installation methods in order of security:
 
-1. **PyPI (Most Secure)**
+1. **PyPI (Recommended)**
    ```bash
    pip install clawbrain[all]
+   clawbrain setup
    ```
    - Downloads from official PyPI with checksums
    - No shell script execution
    - Standard Python package installation
+   - CLI-based setup (no bash scripts)
 
 2. **Git Clone (Auditable)**
    ```bash
    git clone https://github.com/clawcolab/clawbrain.git
    cd clawbrain
-   # REVIEW install.sh before running!
-   ./install.sh
+   pip install -e .[all]
+   clawbrain setup
    ```
    - Full source code available for review
    - No remote downloads during install
-   - Transparent hook installation
+   - Same CLI-based setup as PyPI
 
-3. **Remote Install (Least Secure - Not Recommended for Production)**
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/clawcolab/clawbrain/main/remote-install.sh | bash
-   ```
-   - Downloads and executes script from GitHub
-   - Includes security warning and confirmation prompt
-   - Shows commit hash for verification
-   - **Only use if you trust the GitHub repository**
+### What `clawbrain setup` Does
 
-### What Install Scripts Do
-
-The `install.sh` script performs these actions:
+The `clawbrain setup` command performs these actions:
 1. Detects your platform (OpenClaw or ClawdBot)
-2. Copies hook files to `~/.openclaw/hooks` or `~/.clawdbot/hooks`
-3. Checks for optional Python dependencies (all warnings, no errors)
+2. Generates encryption key at `~/.config/clawbrain/.brain_key`
+3. Copies hook files to `~/.openclaw/hooks` or `~/.clawdbot/hooks`
 4. Tests the installation with a health check
 5. **Does NOT**:
    - Require sudo or root access
    - Modify system files outside your home directory
    - Download additional code from the internet
-   - Execute privileged commands
+   - Execute shell commands or privileged operations
 
 ## Key Management
 
