@@ -1,5 +1,107 @@
 # Changelog
 
+## [0.3.0] - 2026-03-14
+
+### 🚀 Major Feature Release: Hybrid Retrieval, Conversation Ingestion & Multi-Agent Scoping
+
+Transforms ClawBrain from a CRUD memory store into an enterprise-grade AI memory system.
+Brainstormed across GPT-5.4, DeepSeek, and Claude — implemented the consensus roadmap.
+
+#### Added
+
+**Hybrid Retrieval Engine**
+- Weighted scoring across 5 dimensions: semantic, keyword, recency, importance, confidence
+- `recall(query, explain=True)` returns full score breakdowns per memory
+- Configurable weights via `recall(weights={"semantic": 0.5, "keyword": 0.3, ...})`
+- BM25-inspired keyword scoring with phrase bonus
+- Exponential decay recency scoring (1-week half-life)
+- Cosine similarity for semantic matching (when embeddings available)
+- Works without embeddings (keyword + recency + importance scoring)
+
+**Conversation Ingestion**
+- `ingest_conversation(agent_id, user_id, messages)` — auto-extract memories
+- **Rule-based extraction** (zero dependencies): detects preferences, facts, tasks, constraints
+- **LLM-powered extraction** (user provides callable): higher quality, structured output
+- Pattern matching for: "I prefer/like/hate X", "I work at X", "remember to X", "always/never X"
+- Automatic deduplication during ingestion
+
+**Memory Deduplication & Merge**
+- Cosine similarity threshold (0.92) for semantic dedup when embeddings available
+- Normalized text comparison fallback for exact matches
+- Token overlap (Jaccard) for short texts
+- Kind-aware dedup: won't merge across different memory_kind categories
+- Merge strategy: keeps more comprehensive content, bumps confidence/importance
+
+**Session Consolidation**
+- `consolidate_session(agent_id, user_id, messages)` — end-of-session processing
+- Extracts facts, preferences, tasks, constraints from conversation
+- Creates structured session summary stored as episode memory
+- Returns consolidation report with extraction stats
+- LLM-enhanced summarization when callable provided
+
+**Memory Scopes for Multi-Agent**
+- `scope`: private, shared, team, user
+- `scope_id`: scope identifier (e.g., team ID)
+- `created_by_agent`: tracks which agent created each memory
+- `recall(scope="shared", scope_id="team_backend")` — scoped retrieval
+- `recall(include_scopes=["private", "shared"])` — cross-scope queries
+
+**Memory Classification**
+- `memory_kind`: fact, preference, episode, task, constraint, summary, procedure
+- `confidence`: 0.0-1.0 confidence score with validation
+- `durability`: session, short_term, long_term retention tiers
+- Enum validation with fallback defaults
+
+**Access Tracking**
+- `access_count`: auto-incremented on recall()
+- `last_accessed_at`: timestamp of last retrieval
+- Enables learned importance from usage patterns
+
+**Audit Log**
+- `memory_events` table: tracks all mutations (created, deleted, corrected, merged)
+- `get_audit_log(memory_id, event_type, limit, since)` — query audit trail
+- Every remember/forget/correct/merge operation logged with details and actor
+
+**Memory Statistics**
+- `stats(agent_id)` — comprehensive system overview
+- Breakdowns by kind, scope, durability, memory_type
+- Averages for importance and confidence
+- Total access counts and audit event counts
+
+**New CLI Commands**
+- `clawbrain ingest <file>` — ingest conversation from JSON file
+- `clawbrain consolidate <file>` — consolidate session from JSON file
+- `clawbrain stats` — show memory system statistics
+- `clawbrain audit-log` — show memory audit log with filters
+
+#### Changed
+- `recall()` now uses hybrid weighted scoring when query is provided
+- `recall()` supports filtering by memory_kind, scope, scope_id, since, min_confidence, durability
+- `remember()` now supports memory_kind, confidence, scope, durability, deduplicate parameters
+- `remember()` includes timestamp in ID hash to prevent collisions
+- `get_full_context()` uses hybrid retrieval with current message as query
+- Database indexes added for hybrid retrieval performance
+- `_row_to_memory()` handles new fields with safe fallbacks for pre-migration databases
+
+#### Schema
+New columns on `memories` table (auto-migrated):
+- `memory_kind TEXT DEFAULT 'fact'`
+- `confidence REAL DEFAULT 1.0`
+- `durability TEXT DEFAULT 'long_term'`
+- `scope TEXT DEFAULT 'private'`
+- `scope_id TEXT DEFAULT ''`
+- `access_count INTEGER DEFAULT 0`
+- `last_accessed_at TEXT`
+- `created_by_agent TEXT DEFAULT ''`
+
+New table:
+- `memory_events` (id, memory_id, event_type, details, actor, created_at)
+
+New indexes:
+- `idx_memories_agent_kind`, `idx_memories_scope`, `idx_memories_agent_importance`
+- `idx_memories_created`, `idx_memories_durability`
+- `idx_memory_events_memory`, `idx_memory_events_type`
+
 ## [0.2.0] - 2026-03-13
 
 ### 🚀 Major Feature Release: Memory Management, Trait Evolution & Data Export

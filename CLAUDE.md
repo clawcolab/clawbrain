@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-ClawBrain - Personal AI Memory System for AI agents. Python 3.10+, MIT licensed.
+ClawBrain - Enterprise AI Memory System for AI agents. Python 3.10+, MIT licensed.
 
 **Install:**
 ```bash
@@ -20,17 +20,17 @@ pip install clawbrain[all]                     # everything
 pip install -e .  # editable install from source
 ```
 
-**No test suite or linter is currently configured.**
+**Test:** `python3 test_v030.py` (37 integration tests)
 
 ## Architecture
 
 ClawBrain is a single-module library with one source of truth:
 
-- **`clawbrain.py`** - The main module (~800 lines), contains all classes and logic
+- **`clawbrain.py`** - The main module (~3000 lines), contains all classes and logic
 - **`__init__.py`** - Re-exports from `clawbrain` module
 - **`brain/__init__.py`** - Also re-exports from root `clawbrain` module (for backward compatibility)
 
-Exports: `Brain`, `Memory`, `UserProfile`, `Embedder`, `get_bridge_script_path`
+Exports: `Brain`, `Memory`, `ScoredMemory`, `UserProfile`, `Embedder`, `VALID_MEMORY_KINDS`, `VALID_DURABILITIES`, `VALID_SCOPES`, `get_bridge_script_path`
 
 ### Brain class
 
@@ -44,9 +44,14 @@ The central class. Key design decisions:
 
 ### Key methods
 
-- `remember(agent_id, content, memory_type, key, ...)` - Store a memory
-- `recall(agent_id, query, memory_type, limit, ...)` - Retrieve memories
-- `forget(memory_id)` - Delete a memory
+- `remember(agent_id, content, memory_type, memory_kind, confidence, scope, ...)` - Store a memory with classification and scoping
+- `recall(agent_id, query, memory_kind, scope, explain, weights, ...)` - Hybrid retrieval with weighted scoring
+- `forget(memory_id)` - Delete a memory (with audit logging)
+- `correct(memory_id, new_content)` - Update memory content
+- `ingest_conversation(agent_id, user_id, messages, llm_fn)` - Auto-extract memories from conversations
+- `consolidate_session(agent_id, user_id, messages, llm_fn)` - End-of-session summarization + extraction
+- `stats(agent_id)` - Memory system statistics
+- `get_audit_log(memory_id, event_type, limit)` - Query audit trail
 - `get_full_context(session_key, user_id, agent_id, message)` - Assemble full context for LLM prompts
 - `refresh_on_startup(agent_id)` - Called on agent startup to refresh state
 - `import_personality(agent_id, soul_path, identity_path, user_path, memory_path)` - Import personality files

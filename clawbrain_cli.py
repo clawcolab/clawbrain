@@ -804,6 +804,202 @@ def cmd_export_user_data(args):
         return 1
 
 
+def cmd_ingest(args):
+    """Ingest a conversation from a JSON file."""
+    print("📥 Ingest Conversation")
+    print("=" * 40)
+
+    try:
+        from clawbrain import Brain
+
+        # Load messages from file
+        input_path = Path(args.input)
+        if not input_path.exists():
+            print(f"\n❌ File not found: {args.input}")
+            return 1
+
+        with open(input_path) as f:
+            data = json.load(f)
+
+        # Support both {"messages": [...]} and direct [...]
+        if isinstance(data, list):
+            messages = data
+        elif isinstance(data, dict) and "messages" in data:
+            messages = data["messages"]
+        else:
+            print("\n❌ Invalid format. Expected JSON array or {\"messages\": [...]}")
+            return 1
+
+        print(f"\n📄 Loaded {len(messages)} messages from {input_path.name}")
+
+        brain = Brain()
+        extracted = brain.ingest_conversation(
+            agent_id=args.agent,
+            user_id=args.user or "default",
+            messages=messages,
+            extract_types=args.types.split(",") if args.types else None,
+        )
+
+        print(f"\n✅ Extracted {len(extracted)} memories:")
+        for mem in extracted:
+            kind_icon = {"fact": "📋", "preference": "❤️", "task": "📌", "constraint": "🚫",
+                         "episode": "📖", "summary": "📝", "procedure": "⚙️"}.get(mem.memory_kind, "💡")
+            print(f"   {kind_icon} [{mem.memory_kind}] {mem.content[:80]}...")
+
+        brain.close()
+        return 0
+    except Exception as e:
+        print(f"\n❌ Failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+def cmd_consolidate(args):
+    """Consolidate a conversation session."""
+    print("🗜️  Consolidate Session")
+    print("=" * 40)
+
+    try:
+        from clawbrain import Brain
+
+        # Load messages from file
+        input_path = Path(args.input)
+        if not input_path.exists():
+            print(f"\n❌ File not found: {args.input}")
+            return 1
+
+        with open(input_path) as f:
+            data = json.load(f)
+
+        if isinstance(data, list):
+            messages = data
+        elif isinstance(data, dict) and "messages" in data:
+            messages = data["messages"]
+        else:
+            print("\n❌ Invalid format. Expected JSON array or {\"messages\": [...]}")
+            return 1
+
+        print(f"\n📄 Loaded {len(messages)} messages from {input_path.name}")
+
+        brain = Brain()
+        report = brain.consolidate_session(
+            agent_id=args.agent,
+            user_id=args.user or "default",
+            messages=messages,
+            session_id=args.session_id,
+        )
+
+        print(f"\n📊 Consolidation Report:")
+        print(f"   Summary: {report['summary'][:200]}...")
+        print(f"   Memories extracted: {report['stats']['memories_extracted']}")
+        print(f"   By kind: {json.dumps(report['stats']['memory_kinds'])}")
+        print(f"   Session ID: {report['stats']['session_id']}")
+
+        brain.close()
+        return 0
+    except Exception as e:
+        print(f"\n❌ Failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+def cmd_stats(args):
+    """Show memory system statistics."""
+    print("📊 Memory Statistics")
+    print("=" * 40)
+
+    try:
+        from clawbrain import Brain
+        brain = Brain()
+        s = brain.stats(agent_id=args.agent if args.agent != "all" else None)
+
+        print(f"\n📦 Total memories: {s['total_memories']}")
+        print(f"🔧 Backend: {s['storage_backend']}")
+        print(f"🔐 Encryption: {'Enabled' if s['encryption_enabled'] else 'Disabled'}")
+        print(f"🧠 Embeddings: {'Enabled' if s['embeddings_enabled'] else 'Disabled'}")
+
+        if s['total_memories'] > 0:
+            print(f"\n📈 Averages:")
+            print(f"   Importance: {s['avg_importance']}/10")
+            print(f"   Confidence: {s['avg_confidence']}")
+            print(f"   Total accesses: {s['total_access_count']}")
+
+            if s['by_kind']:
+                print(f"\n📋 By Kind:")
+                for kind, count in sorted(s['by_kind'].items(), key=lambda x: -x[1]):
+                    print(f"   {kind}: {count}")
+
+            if s['by_scope']:
+                print(f"\n🔒 By Scope:")
+                for scope, count in sorted(s['by_scope'].items(), key=lambda x: -x[1]):
+                    print(f"   {scope}: {count}")
+
+            if s['by_durability']:
+                print(f"\n⏱️  By Durability:")
+                for dur, count in sorted(s['by_durability'].items(), key=lambda x: -x[1]):
+                    print(f"   {dur}: {count}")
+
+            if s.get('by_memory_type'):
+                print(f"\n📁 By Type:")
+                for mtype, count in sorted(s['by_memory_type'].items(), key=lambda x: -x[1]):
+                    print(f"   {mtype}: {count}")
+
+        if s.get('total_audit_events', 0) > 0:
+            print(f"\n📝 Audit events: {s['total_audit_events']}")
+
+        brain.close()
+        return 0
+    except Exception as e:
+        print(f"\n❌ Failed: {e}")
+        return 1
+
+
+def cmd_audit_log(args):
+    """Show memory audit log."""
+    print("📝 Memory Audit Log")
+    print("=" * 40)
+
+    try:
+        from clawbrain import Brain
+        brain = Brain()
+
+        events = brain.get_audit_log(
+            memory_id=args.memory_id,
+            event_type=args.event_type,
+            limit=args.limit,
+            since=args.since,
+        )
+
+        if not events:
+            print("\n   No audit events found.")
+        else:
+            print(f"\n   Showing {len(events)} event(s):\n")
+            for evt in events:
+                ts = evt.get("created_at", "")[:19]
+                etype = evt.get("event_type", "unknown")
+                mid = evt.get("memory_id", "?")[:12]
+                actor = evt.get("actor", "")
+                details = evt.get("details", {})
+                if isinstance(details, str):
+                    try:
+                        details = json.loads(details)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                icon = {"created": "➕", "deleted": "🗑️", "corrected": "✏️",
+                        "merged": "🔀", "accessed": "👁️"}.get(etype, "📌")
+                detail_str = json.dumps(details)[:80] if details else ""
+                print(f"   {icon} {ts} | {etype:10s} | {mid}... | {actor} | {detail_str}")
+
+        brain.close()
+        return 0
+    except Exception as e:
+        print(f"\n❌ Failed: {e}")
+        return 1
+
+
 def cmd_import_personality(args):
     """Import OpenClaw personality files into ClawBrain memories."""
     print("📥 Import OpenClaw Personality Files")
@@ -956,7 +1152,7 @@ Documentation: https://github.com/clawcolab/clawbrain
         """
     )
     
-    parser.add_argument("--version", action="version", version="ClawBrain 0.2.0")
+    parser.add_argument("--version", action="version", version="ClawBrain 0.3.0")
     
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
@@ -1028,6 +1224,37 @@ Documentation: https://github.com/clawcolab/clawbrain
     export_parser.add_argument("--agent", "-a", help="Optional agent ID filter")
     export_parser.add_argument("--output", "-o", help="Output file path (default: stdout)")
     export_parser.set_defaults(func=cmd_export_user_data)
+
+    # ingest command
+    ingest_parser = subparsers.add_parser("ingest", help="Ingest a conversation from JSON file and extract memories")
+    ingest_parser.add_argument("input", help="Path to JSON file with messages")
+    ingest_parser.add_argument("--agent", "-a", default="default", help="Agent ID (default: 'default')")
+    ingest_parser.add_argument("--user", "-u", default="default", help="User ID (default: 'default')")
+    ingest_parser.add_argument("--types", "-t", default=None,
+                               help="Comma-separated extract types: facts,preferences,tasks,constraints (default: all)")
+    ingest_parser.set_defaults(func=cmd_ingest)
+
+    # consolidate command
+    consolidate_parser = subparsers.add_parser("consolidate", help="Consolidate a conversation session into long-term memories")
+    consolidate_parser.add_argument("input", help="Path to JSON file with messages")
+    consolidate_parser.add_argument("--agent", "-a", default="default", help="Agent ID (default: 'default')")
+    consolidate_parser.add_argument("--user", "-u", default="default", help="User ID (default: 'default')")
+    consolidate_parser.add_argument("--session-id", "-s", default=None, help="Session ID (auto-generated if not provided)")
+    consolidate_parser.set_defaults(func=cmd_consolidate)
+
+    # stats command
+    stats_parser = subparsers.add_parser("stats", help="Show memory system statistics")
+    stats_parser.add_argument("--agent", "-a", default="all", help="Agent ID to filter (default: all)")
+    stats_parser.set_defaults(func=cmd_stats)
+
+    # audit-log command
+    audit_parser = subparsers.add_parser("audit-log", help="Show memory audit log")
+    audit_parser.add_argument("--memory-id", "-m", default=None, help="Filter by memory ID")
+    audit_parser.add_argument("--event-type", "-e", default=None,
+                              help="Filter by event type (created, deleted, corrected, merged)")
+    audit_parser.add_argument("--limit", "-l", type=int, default=50, help="Max entries (default: 50)")
+    audit_parser.add_argument("--since", "-s", default=None, help="ISO timestamp to filter from")
+    audit_parser.set_defaults(func=cmd_audit_log)
 
     # import-personality command
     import_parser = subparsers.add_parser("import-personality", help="Import OpenClaw personality files (SOUL.md, IDENTITY.md, USER.md, MEMORY.md)")

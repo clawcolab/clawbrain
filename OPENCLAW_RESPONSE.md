@@ -1,6 +1,6 @@
 # Response to OpenClaw Security Scan
 
-This document explains how we've addressed the security concerns raised by OpenClaw's skill scanner for ClawBrain v0.1.10.
+This document explains how we've addressed the security concerns raised by OpenClaw's skill scanner for ClawBrain v0.3.0.
 
 ## Summary of Changes
 
@@ -238,6 +238,6 @@ The skill is now fully transparent about its capabilities, permissions, and secu
 
 ---
 
-**Version**: 0.2.0
+**Version**: 0.3.0
 **Last Updated**: 2026-03-13
 **Security Contact**: clawcolab@gmail.com (via GitHub Issues)
