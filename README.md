@@ -1,5 +1,7 @@
 # Claw Brain 🧠
 
+[![IdeaCred](https://ideacred.com/api/badge/clawcolab/clawbrain)](https://ideacred.com/profile/spranab)
+
 **Personal AI Memory System for AI Agents**
 
 A sophisticated memory and learning system that enables truly personalized AI-human communication.
