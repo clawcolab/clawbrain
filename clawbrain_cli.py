@@ -678,6 +678,132 @@ def parse_personality_file(filepath: Path) -> dict:
     }
 
 
+def cmd_forget(args):
+    """Delete a specific memory by ID."""
+    print("🗑️  Forget Memory")
+    print("=" * 40)
+
+    try:
+        from clawbrain import Brain
+        brain = Brain()
+
+        if not args.force:
+            response = input(f"\nDelete memory {args.memory_id}? (y/N) ").strip().lower()
+            if response != 'y':
+                print("Cancelled.")
+                return 1
+
+        if brain.forget(args.memory_id):
+            print(f"\n✅ Memory {args.memory_id} deleted.")
+        else:
+            print(f"\n❌ Memory {args.memory_id} not found.")
+            return 1
+
+        brain.close()
+        return 0
+    except Exception as e:
+        print(f"\n❌ Failed: {e}")
+        return 1
+
+
+def cmd_correct(args):
+    """Correct a memory's content."""
+    print("✏️  Correct Memory")
+    print("=" * 40)
+
+    try:
+        from clawbrain import Brain
+        brain = Brain()
+
+        memory = brain.correct(args.memory_id, args.content)
+        if memory:
+            print(f"\n✅ Memory {args.memory_id} corrected.")
+            print(f"   New content: {memory.content[:100]}...")
+        else:
+            print(f"\n❌ Memory {args.memory_id} not found.")
+            return 1
+
+        brain.close()
+        return 0
+    except Exception as e:
+        print(f"\n❌ Failed: {e}")
+        return 1
+
+
+def cmd_cleanup_expired(args):
+    """Remove expired memories."""
+    print("🧹 Cleanup Expired Memories")
+    print("=" * 40)
+
+    try:
+        from clawbrain import Brain
+        brain = Brain()
+
+        deleted = brain.cleanup_expired()
+        print(f"\n✅ Cleaned up {deleted} expired memories.")
+
+        brain.close()
+        return 0
+    except Exception as e:
+        print(f"\n❌ Failed: {e}")
+        return 1
+
+
+def cmd_decay_importance(args):
+    """Decay importance of memories."""
+    print("📉 Decay Memory Importance")
+    print("=" * 40)
+
+    try:
+        from clawbrain import Brain
+        brain = Brain()
+
+        affected = brain.decay_importance(
+            agent_id=args.agent if args.agent != "all" else None,
+            decay_factor=args.factor,
+            min_importance=args.min_importance,
+        )
+        print(f"\n✅ Decayed importance for {affected} memories (factor={args.factor}).")
+
+        brain.close()
+        return 0
+    except Exception as e:
+        print(f"\n❌ Failed: {e}")
+        return 1
+
+
+def cmd_export_user_data(args):
+    """Export all user data (GDPR-friendly)."""
+    print("📦 Export User Data")
+    print("=" * 40)
+
+    try:
+        from clawbrain import Brain
+        brain = Brain()
+
+        data = brain.export_user_data(
+            user_id=args.user_id,
+            agent_id=args.agent if args.agent else None,
+        )
+
+        output = json.dumps(data, indent=2, default=str)
+
+        if args.output:
+            output_path = Path(args.output)
+            output_path.write_text(output)
+            print(f"\n✅ Exported data for user '{args.user_id}' to {output_path}")
+            print(f"   Memories: {data['memories_count']}")
+            print(f"   Conversations: {data['conversations_count']}")
+        else:
+            print(output)
+
+        brain.close()
+        return 0
+    except Exception as e:
+        print(f"\n❌ Failed: {e}")
+        return 1
+
+
 def cmd_import_personality(args):
     """Import OpenClaw personality files into ClawBrain memories."""
     print("📥 Import OpenClaw Personality Files")
@@ -830,7 +956,7 @@ Documentation: https://github.com/clawcolab/clawbrain
         """
     )
     
-    parser.add_argument("--version", action="version", version="ClawBrain 0.1.10")
+    parser.add_argument("--version", action="version", version="ClawBrain 0.2.0")
     
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
@@ -873,6 +999,36 @@ Documentation: https://github.com/clawcolab/clawbrain
     migrate_parser.add_argument("--force", "-f", action="store_true", help="Skip confirmation prompt")
     migrate_parser.set_defaults(func=cmd_migrate_secrets)
     
+    # forget command
+    forget_parser = subparsers.add_parser("forget", help="Delete a specific memory by ID")
+    forget_parser.add_argument("memory_id", help="Memory ID to delete")
+    forget_parser.add_argument("--force", "-f", action="store_true", help="Skip confirmation prompt")
+    forget_parser.set_defaults(func=cmd_forget)
+
+    # correct command
+    correct_parser = subparsers.add_parser("correct", help="Correct/update a memory's content")
+    correct_parser.add_argument("memory_id", help="Memory ID to correct")
+    correct_parser.add_argument("content", help="New corrected content")
+    correct_parser.set_defaults(func=cmd_correct)
+
+    # cleanup-expired command
+    cleanup_parser = subparsers.add_parser("cleanup-expired", help="Remove expired memories")
+    cleanup_parser.set_defaults(func=cmd_cleanup_expired)
+
+    # decay-importance command
+    decay_parser = subparsers.add_parser("decay-importance", help="Decay importance of old memories")
+    decay_parser.add_argument("--agent", "-a", default="all", help="Agent ID to decay (default: all)")
+    decay_parser.add_argument("--factor", type=float, default=0.95, help="Decay factor (default: 0.95)")
+    decay_parser.add_argument("--min-importance", type=int, default=1, help="Minimum importance floor (default: 1)")
+    decay_parser.set_defaults(func=cmd_decay_importance)
+
+    # export-user-data command
+    export_parser = subparsers.add_parser("export-user-data", help="Export all user data (GDPR-friendly)")
+    export_parser.add_argument("user_id", help="User ID to export data for")
+    export_parser.add_argument("--agent", "-a", help="Optional agent ID filter")
+    export_parser.add_argument("--output", "-o", help="Output file path (default: stdout)")
+    export_parser.set_defaults(func=cmd_export_user_data)
+
     # import-personality command
     import_parser = subparsers.add_parser("import-personality", help="Import OpenClaw personality files (SOUL.md, IDENTITY.md, USER.md, MEMORY.md)")
     import_parser.add_argument("--path", "-p", help="Path to OpenClaw directory (auto-detected if not specified)")

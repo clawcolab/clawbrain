@@ -13,14 +13,14 @@ Features:
 Supports: SQLite (default), PostgreSQL, Redis
 """
 
-__version__ = "0.1.14"
+__version__ = "0.2.0"
 __author__ = "ClawColab"
 
 import os
 import json
 import hashlib
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -107,6 +107,7 @@ class Memory:
     embedding: List[float]
     created_at: str
     updated_at: str
+    expires_at: Optional[str] = None
 
 
 @dataclass
@@ -146,6 +147,16 @@ DEFAULT_CONFIG = {
     "embedding_model": os.environ.get("BRAIN_EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
     "backup_dir": os.environ.get("BRAIN_BACKUP_DIR", "./brain_backups"),
     "encryption_key": os.environ.get("BRAIN_ENCRYPTION_KEY", ""),  # Fernet key for encrypting sensitive data
+}
+
+
+DEFAULT_TRAITS = {
+    "humor": 0.5,
+    "empathy": 0.5,
+    "curiosity": 0.5,
+    "creativity": 0.5,
+    "helpfulness": 0.5,
+    "honesty": 0.5,
 }
 
 
@@ -229,7 +240,8 @@ class Brain:
             """CREATE TABLE IF NOT EXISTS memories (
                 id TEXT PRIMARY KEY, agent_id TEXT, memory_type TEXT, key TEXT, content TEXT,
                 content_encrypted INTEGER, summary TEXT, keywords TEXT, tags TEXT, importance INTEGER,
-                linked_to TEXT, source TEXT, embedding TEXT, created_at TEXT, updated_at TEXT)""",
+                linked_to TEXT, source TEXT, embedding TEXT, created_at TEXT, updated_at TEXT,
+                expires_at TEXT)""",
             """CREATE TABLE IF NOT EXISTS todos (
                 id TEXT PRIMARY KEY, agent_id TEXT, title TEXT, description TEXT,
                 status TEXT, priority INTEGER, due_date TEXT, created_at TEXT, updated_at TEXT)""",
@@ -261,6 +273,13 @@ class Brain:
         
         for sql in tables:
             cursor.execute(sql)
+
+        # Migration: add expires_at column if not exists (for existing databases)
+        try:
+            cursor.execute("ALTER TABLE memories ADD COLUMN expires_at TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         self._sqlite_conn.commit()
     
     def _setup_postgres(self):
@@ -352,7 +371,7 @@ class Brain:
     
     # ========== MEMORIES ==========
     def remember(self, agent_id: str, memory_type: str, content: str, key: str = None,
-                 tags: List[str] = None, auto_tag: bool = False, **kwargs) -> Memory:
+                 tags: List[str] = None, auto_tag: bool = False, ttl_hours: int = None, **kwargs) -> Memory:
         """
         Store a memory with optional tags.
 
@@ -363,12 +382,16 @@ class Brain:
             key: Optional memory key (auto-generated if not provided)
             tags: Optional list of tags for categorization
             auto_tag: If True, automatically add extracted keywords as tags
+            ttl_hours: Optional time-to-live in hours (memory expires after this)
             **kwargs: Additional options (importance, linked_to, source)
 
         Returns:
             Memory object
         """
         now = datetime.now().isoformat()
+        expires_at = None
+        if ttl_hours is not None:
+            expires_at = (datetime.now() + timedelta(hours=ttl_hours)).isoformat()
         memory_id = str(hashlib.md5(f"{agent_id}:{memory_type}:{content[:100]}".encode()).hexdigest())
         keywords = self._extract_keywords([{"content": content}])
         embedding = None
@@ -408,31 +431,32 @@ class Brain:
             tags=list(final_tags),
             importance=kwargs.get("importance", 5),
             linked_to=kwargs.get("linked_to"), source=kwargs.get("source"),
-            embedding=embedding, created_at=now, updated_at=now
+            embedding=embedding, created_at=now, updated_at=now,
+            expires_at=expires_at
         )
 
         with self._get_cursor() as cursor:
             if self._storage == "sqlite":
                 cursor.execute("""INSERT OR IGNORE INTO memories
                     (id, agent_id, memory_type, key, content, content_encrypted, summary, keywords, tags,
-                     importance, linked_to, source, embedding, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                     importance, linked_to, source, embedding, created_at, updated_at, expires_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (memory.id, memory.agent_id, memory.memory_type, memory.key, memory.content,
                      int(memory.content_encrypted), memory.summary, json.dumps(memory.keywords),
                      json.dumps(memory.tags), memory.importance, memory.linked_to, memory.source,
                      json.dumps(memory.embedding) if memory.embedding else None,
-                     memory.created_at, memory.updated_at))
+                     memory.created_at, memory.updated_at, memory.expires_at))
             else:
                 cursor.execute("""INSERT INTO memories
                     (id, agent_id, memory_type, key, content, content_encrypted, summary, keywords, tags,
-                     importance, linked_to, source, embedding, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     importance, linked_to, source, embedding, created_at, updated_at, expires_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO NOTHING""",
                     (memory.id, memory.agent_id, memory.memory_type, memory.key, memory.content,
                      memory.content_encrypted, memory.summary, memory.keywords, memory.tags,
                      memory.importance, memory.linked_to, memory.source,
                      psycopg2.extras.Json(memory.embedding) if memory.embedding else None,
-                     memory.created_at, memory.updated_at))
+                     memory.created_at, memory.updated_at, memory.expires_at))
         return memory
     
     def recall(self, agent_id: str = None, query: str = None, memory_type: str = None, limit: int = 10) -> List[Memory]:
@@ -444,6 +468,10 @@ class Brain:
             if memory_type:
                 conditions.append("memory_type = " + ("?" if self._storage == "sqlite" else "%s"))
                 params.append(memory_type)
+            # Filter out expired memories
+            ph = "?" if self._storage == "sqlite" else "%s"
+            conditions.append(f"(expires_at IS NULL OR expires_at > {ph})")
+            params.append(datetime.now().isoformat())
             where = " AND ".join(conditions) if conditions else "1=1"
             limit_param = limit
             
@@ -457,6 +485,163 @@ class Brain:
             
             rows = cursor.fetchall()
         return [self._row_to_memory(row) for row in rows]
+
+    def forget(self, memory_id: str) -> bool:
+        """
+        Delete a specific memory by ID.
+
+        Args:
+            memory_id: The memory ID to delete
+
+        Returns:
+            True if memory was deleted, False if not found
+        """
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+            else:
+                cursor.execute("DELETE FROM memories WHERE id = %s", (memory_id,))
+            deleted = cursor.rowcount > 0
+
+        if deleted:
+            # Invalidate Redis cache if available
+            if self._redis:
+                try:
+                    self._redis.delete(f"{self._redis_prefix}memory:{memory_id}")
+                except Exception:
+                    pass
+            logger.info(f"Deleted memory: {memory_id}")
+        return deleted
+
+    def correct(self, memory_id: str, new_content: str) -> Optional[Memory]:
+        """
+        Correct/update a memory's content.
+
+        Args:
+            memory_id: The memory ID to update
+            new_content: The corrected content
+
+        Returns:
+            Updated Memory object, or None if not found
+        """
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute("SELECT * FROM memories WHERE id = ?", (memory_id,))
+            else:
+                cursor.execute("SELECT * FROM memories WHERE id = %s", (memory_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+        # Re-encrypt if the original was encrypted
+        is_encrypted = bool(row["content_encrypted"])
+        stored_content = new_content
+        if is_encrypted and self._cipher:
+            stored_content = self._encrypt(new_content)
+
+        # Recalculate metadata
+        keywords = self._extract_keywords([{"content": new_content}]) if not is_encrypted else []
+        summary = self._summarize([{"content": new_content}]) if not is_encrypted else "[Encrypted]"
+        embedding = None
+        if self._embedder and self._embedder.model and not is_encrypted:
+            embedding = self._embedder.embed(new_content)
+
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute(
+                    """UPDATE memories SET content = ?, summary = ?, keywords = ?,
+                       embedding = ?, updated_at = ? WHERE id = ?""",
+                    (stored_content, summary, json.dumps(keywords),
+                     json.dumps(embedding) if embedding else None, now, memory_id)
+                )
+            else:
+                cursor.execute(
+                    """UPDATE memories SET content = %s, summary = %s, keywords = %s,
+                       embedding = %s, updated_at = %s WHERE id = %s""",
+                    (stored_content, summary, keywords,
+                     psycopg2.extras.Json(embedding) if embedding else None, now, memory_id)
+                )
+
+        logger.info(f"Corrected memory: {memory_id}")
+        # Re-fetch and return the updated memory
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute("SELECT * FROM memories WHERE id = ?", (memory_id,))
+            else:
+                cursor.execute("SELECT * FROM memories WHERE id = %s", (memory_id,))
+            row = cursor.fetchone()
+        return self._row_to_memory(row) if row else None
+
+    def cleanup_expired(self) -> int:
+        """
+        Delete all expired memories.
+
+        Returns:
+            Number of memories deleted
+        """
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute(
+                    "DELETE FROM memories WHERE expires_at IS NOT NULL AND expires_at < ?",
+                    (now,)
+                )
+            else:
+                cursor.execute(
+                    "DELETE FROM memories WHERE expires_at IS NOT NULL AND expires_at < %s",
+                    (now,)
+                )
+            deleted = cursor.rowcount
+        if deleted > 0:
+            logger.info(f"Cleaned up {deleted} expired memories")
+        return deleted
+
+    def decay_importance(self, agent_id: str = None, decay_factor: float = 0.95,
+                         min_importance: int = 1) -> int:
+        """
+        Decay importance of memories over time. Call periodically to let
+        old, unreinforced memories gradually fade in relevance.
+
+        Args:
+            agent_id: Optional agent filter
+            decay_factor: Multiplier for importance (0.95 = 5% decay per call)
+            min_importance: Minimum importance floor
+
+        Returns:
+            Number of memories affected
+        """
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                if agent_id:
+                    cursor.execute(
+                        """UPDATE memories SET importance = MAX(?, CAST(importance * ? AS INTEGER)),
+                           updated_at = ? WHERE importance > ? AND agent_id = ?""",
+                        (min_importance, decay_factor, datetime.now().isoformat(), min_importance, agent_id)
+                    )
+                else:
+                    cursor.execute(
+                        """UPDATE memories SET importance = MAX(?, CAST(importance * ? AS INTEGER)),
+                           updated_at = ? WHERE importance > ?""",
+                        (min_importance, decay_factor, datetime.now().isoformat(), min_importance)
+                    )
+            else:
+                if agent_id:
+                    cursor.execute(
+                        """UPDATE memories SET importance = GREATEST(%s, CAST(importance * %s AS INTEGER)),
+                           updated_at = %s WHERE importance > %s AND agent_id = %s""",
+                        (min_importance, decay_factor, datetime.now().isoformat(), min_importance, agent_id)
+                    )
+                else:
+                    cursor.execute(
+                        """UPDATE memories SET importance = GREATEST(%s, CAST(importance * %s AS INTEGER)),
+                           updated_at = %s WHERE importance > %s""",
+                        (min_importance, decay_factor, datetime.now().isoformat(), min_importance)
+                    )
+            affected = cursor.rowcount
+        if affected > 0:
+            logger.info(f"Decayed importance for {affected} memories (factor={decay_factor})")
+        return affected
 
     def get_unencrypted_secrets(self) -> List[Dict]:
         """
@@ -942,13 +1127,19 @@ class Brain:
                 logger.error(f"Failed to decrypt memory {row['id']}: {e}")
                 content = "[Decryption Failed]"
 
+        # Handle expires_at
+        expires_at = row["expires_at"] if "expires_at" in row.keys() else None
+        if hasattr(expires_at, 'isoformat'):
+            expires_at = expires_at.isoformat()
+
         return Memory(
             id=row["id"], agent_id=row["agent_id"], memory_type=row["memory_type"],
             key=row["key"], content=content, content_encrypted=is_encrypted,
             summary=row["summary"], keywords=keywords, tags=tags,
             importance=row["importance"], linked_to=row["linked_to"], source=row["source"],
             embedding=embedding,
-            created_at=created_at, updated_at=updated_at
+            created_at=created_at, updated_at=updated_at,
+            expires_at=expires_at
         )
     
     # ========== CONVERSATIONS ==========
@@ -1094,6 +1285,86 @@ class Brain:
                      profile.total_interactions, profile.first_interaction, profile.last_interaction,
                      profile.updated_at))
     
+    def export_user_data(self, user_id: str, agent_id: str = None) -> Dict[str, Any]:
+        """
+        Export all data associated with a user (GDPR-friendly).
+
+        Args:
+            user_id: User identifier
+            agent_id: Optional agent filter for memories
+
+        Returns:
+            JSON-serializable dict with all user data
+        """
+        # User profile
+        profile = self.get_user_profile(user_id)
+        profile_data = asdict(profile)
+
+        # Bonds
+        bonds_data = None
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute("SELECT * FROM bonds WHERE user_id = ?", (user_id,))
+            else:
+                cursor.execute("SELECT * FROM bonds WHERE user_id = %s", (user_id,))
+            row = cursor.fetchone()
+            if row:
+                bonds_data = {k: row[k] for k in row.keys()}
+                # Convert datetime objects
+                for k, v in bonds_data.items():
+                    if hasattr(v, 'isoformat'):
+                        bonds_data[k] = v.isoformat()
+
+        # Memories (scoped by agent_id if provided)
+        if agent_id:
+            memories = self.recall(agent_id=agent_id, limit=10000)
+        else:
+            memories = self.recall(limit=10000)
+        memories_data = [asdict(m) for m in memories]
+
+        # Conversations
+        conversations_data = []
+        with self._get_cursor() as cursor:
+            if agent_id:
+                ph = "?" if self._storage == "sqlite" else "%s"
+                cursor.execute(f"SELECT * FROM conversations WHERE agent_id = {ph}", (agent_id,))
+            else:
+                cursor.execute("SELECT * FROM conversations")
+            for row in cursor.fetchall():
+                conv = {k: row[k] for k in row.keys()}
+                for k, v in conv.items():
+                    if hasattr(v, 'isoformat'):
+                        conv[k] = v.isoformat()
+                    elif isinstance(v, str) and k in ("messages", "keywords"):
+                        try:
+                            conv[k] = json.loads(v)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                conversations_data.append(conv)
+
+        # Learning insights
+        insights_data = []
+        with self._get_cursor() as cursor:
+            cursor.execute("SELECT * FROM learning_insights")
+            for row in cursor.fetchall():
+                insight = {k: row[k] for k in row.keys()}
+                for k, v in insight.items():
+                    if hasattr(v, 'isoformat'):
+                        insight[k] = v.isoformat()
+                insights_data.append(insight)
+
+        return {
+            "user_id": user_id,
+            "exported_at": datetime.now().isoformat(),
+            "profile": profile_data,
+            "bonds": bonds_data,
+            "memories": memories_data,
+            "memories_count": len(memories_data),
+            "conversations": conversations_data,
+            "conversations_count": len(conversations_data),
+            "learning_insights": insights_data,
+        }
+
     # ========== MOOD/INTENT DETECTION ==========
     def detect_user_mood(self, message: str) -> Dict[str, Any]:
         message_lower = message.lower()
@@ -1129,18 +1400,271 @@ class Brain:
             return "farewell"
         return "statement"
     
+    # ========== SOUL / TRAIT EVOLUTION ==========
+    def get_soul(self, agent_id: str) -> Dict[str, Any]:
+        """
+        Get the soul/personality traits for an agent.
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            Dict with traits, interaction_count, and metadata
+        """
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute("SELECT * FROM souls WHERE agent_id = ?", (agent_id,))
+            else:
+                cursor.execute("SELECT * FROM souls WHERE agent_id = %s", (agent_id,))
+            row = cursor.fetchone()
+
+        if row:
+            traits = row["traits"]
+            if isinstance(traits, str):
+                traits = json.loads(traits) if traits else dict(DEFAULT_TRAITS)
+            return {
+                "agent_id": agent_id,
+                "traits": traits,
+                "preferred_topics": json.loads(row["preferred_topics"]) if isinstance(row["preferred_topics"], str) and row["preferred_topics"] else (row["preferred_topics"] or []),
+                "interaction_count": row["interaction_count"] or 0,
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+
+        # Create new soul with default traits
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute(
+                    """INSERT OR IGNORE INTO souls (agent_id, traits, preferred_topics, interaction_count, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (agent_id, json.dumps(DEFAULT_TRAITS), json.dumps([]), 0, now, now)
+                )
+            else:
+                cursor.execute(
+                    """INSERT INTO souls (agent_id, traits, preferred_topics, interaction_count, created_at, updated_at)
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (agent_id) DO NOTHING""",
+                    (agent_id, json.dumps(DEFAULT_TRAITS), json.dumps([]), 0, now, now)
+                )
+        return {
+            "agent_id": agent_id,
+            "traits": dict(DEFAULT_TRAITS),
+            "preferred_topics": [],
+            "interaction_count": 0,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    def evolve_traits(self, agent_id: str, interaction_signals: Dict[str, float]) -> Dict[str, float]:
+        """
+        Evolve personality traits based on interaction signals.
+        Learning rate decreases as interaction_count grows, preventing wild swings.
+
+        Args:
+            agent_id: Agent identifier
+            interaction_signals: Dict mapping trait names to signal strengths
+                                 (e.g., {"humor": 0.1, "empathy": -0.05})
+
+        Returns:
+            Updated traits dict
+        """
+        soul = self.get_soul(agent_id)
+        traits = soul["traits"]
+        count = soul["interaction_count"]
+
+        # Learning rate decreases over time: starts at 0.1, approaches 0.01
+        learning_rate = max(0.01, 0.1 / (1 + count / 100))
+
+        for trait_name, signal in interaction_signals.items():
+            if trait_name in traits:
+                new_value = traits[trait_name] + signal * learning_rate
+                traits[trait_name] = max(0.0, min(1.0, new_value))
+
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            if self._storage == "sqlite":
+                cursor.execute(
+                    """UPDATE souls SET traits = ?, interaction_count = ?, updated_at = ?
+                       WHERE agent_id = ?""",
+                    (json.dumps(traits), count + 1, now, agent_id)
+                )
+            else:
+                cursor.execute(
+                    """UPDATE souls SET traits = %s, interaction_count = %s, updated_at = %s
+                       WHERE agent_id = %s""",
+                    (json.dumps(traits), count + 1, now, agent_id)
+                )
+
+        logger.info(f"Evolved traits for {agent_id}: {traits}")
+        return traits
+
+    def analyze_interaction_for_traits(self, message: str, response: str = None) -> Dict[str, float]:
+        """
+        Derive trait evolution signals from a user message and optional agent response.
+        Uses keyword-based heuristics to detect trait-relevant interactions.
+
+        Args:
+            message: User's message
+            response: Optional agent response
+
+        Returns:
+            Dict of trait signals (only non-zero values)
+        """
+        text = (message + " " + (response or "")).lower()
+        signals = {}
+
+        # Humor: jokes, laughter
+        humor_words = ["lol", "haha", "funny", "joke", "laugh", "hilarious", "rofl", "lmao", "😂", "🤣"]
+        humor_score = sum(1 for w in humor_words if w in text)
+        if humor_score > 0:
+            signals["humor"] = min(1.0, humor_score * 0.3)
+
+        # Empathy: emotional content
+        empathy_words = ["feel", "struggle", "hard time", "difficult", "sorry", "understand", "support",
+                         "care", "worried", "scared", "lonely", "hurt"]
+        empathy_score = sum(1 for w in empathy_words if w in text)
+        if empathy_score > 0:
+            signals["empathy"] = min(1.0, empathy_score * 0.3)
+
+        # Curiosity: questions, exploration
+        curiosity_words = ["why", "how does", "interesting", "wonder", "curious", "explore",
+                          "learn", "discover", "fascinating", "tell me more"]
+        curiosity_score = sum(1 for w in curiosity_words if w in text)
+        if curiosity_score > 0:
+            signals["curiosity"] = min(1.0, curiosity_score * 0.3)
+
+        # Creativity: creative content
+        creativity_words = ["idea", "imagine", "what if", "create", "design", "build",
+                           "invent", "brainstorm", "concept", "prototype"]
+        creativity_score = sum(1 for w in creativity_words if w in text)
+        if creativity_score > 0:
+            signals["creativity"] = min(1.0, creativity_score * 0.3)
+
+        # Helpfulness: gratitude, satisfaction
+        help_words = ["thanks", "thank you", "helpful", "solved", "perfect", "exactly",
+                     "great job", "appreciate", "awesome", "worked"]
+        help_score = sum(1 for w in help_words if w in text)
+        if help_score > 0:
+            signals["helpfulness"] = min(1.0, help_score * 0.3)
+
+        # Honesty: correction acceptance
+        honesty_words = ["actually", "you're right", "fair point", "i was wrong", "good point",
+                        "correction", "honest", "truthful", "accurate"]
+        honesty_score = sum(1 for w in honesty_words if w in text)
+        if honesty_score > 0:
+            signals["honesty"] = min(1.0, honesty_score * 0.3)
+
+        return signals
+
+    def get_trait_influenced_guidance(self, agent_id: str) -> Dict[str, Any]:
+        """
+        Translate current traits into response guidance adjustments.
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            Dict of guidance overrides based on trait levels
+        """
+        soul = self.get_soul(agent_id)
+        traits = soul["traits"]
+        guidance = {}
+
+        # High humor (> 0.6) -> use humor
+        guidance["use_humor"] = traits.get("humor", 0.5) > 0.6
+
+        # High empathy (> 0.6) -> show empathy, be encouraging
+        if traits.get("empathy", 0.5) > 0.6:
+            guidance["show_empathy"] = True
+            guidance["be_encouraging"] = True
+
+        # High curiosity (> 0.6) -> ask follow-up questions
+        guidance["ask_followups"] = traits.get("curiosity", 0.5) > 0.6
+
+        # High creativity (> 0.6) -> suggest alternatives
+        guidance["suggest_alternatives"] = traits.get("creativity", 0.5) > 0.6
+
+        # High helpfulness (> 0.7) -> proactive suggestions
+        guidance["proactive_suggestions"] = traits.get("helpfulness", 0.5) > 0.7
+
+        # High honesty (> 0.6) -> direct communication
+        if traits.get("honesty", 0.5) > 0.6:
+            guidance["tone"] = "direct"
+
+        # Match energy based on overall trait levels
+        avg_energy = sum(traits.values()) / len(traits) if traits else 0.5
+        guidance["match_energy"] = avg_energy > 0.6
+
+        return guidance
+
     # ========== FULL CONTEXT ==========
-    def get_full_context(self, session_key: str, user_id: str = "default", agent_id: str = "assistant", message: str = None) -> Dict[str, Any]:
+    def _estimate_tokens(self, text: str) -> int:
+        """Estimate token count using ~4 chars per token heuristic."""
+        if not text:
+            return 0
+        return len(str(text)) // 4
+
+    def get_full_context(self, session_key: str, user_id: str = "default", agent_id: str = "assistant",
+                         message: str = None, max_tokens: int = None) -> Dict[str, Any]:
+        """
+        Assemble full context for LLM prompt injection.
+
+        Args:
+            session_key: Session identifier
+            user_id: User identifier
+            agent_id: Agent identifier
+            message: Current user message for mood/intent analysis
+            max_tokens: Optional token budget - limits context size to fit model window
+
+        Returns:
+            JSON-serializable dict with user profile, memories, conversation state, etc.
+        """
         now = datetime.now()
         message_analysis = {}
         if message:
             message_analysis = {"mood": self.detect_user_mood(message), "intent": self.detect_user_intent(message)}
-        
+
         conversation_state = self.get_conversation(session_key)
         user_profile = self.get_user_profile(user_id)
-        memories = self.recall(agent_id=agent_id, limit=10)
-        
-        return {
+
+        # Request more memories if we have a token budget (we'll trim later)
+        memory_limit = 20 if max_tokens else 10
+        memories = self.recall(agent_id=agent_id, limit=memory_limit)
+
+        # Build response guidance
+        response_guidance = {
+            "tone": "friendly", "formality": user_profile.communication_preferences.get("formality", "casual"),
+            "verbosity": user_profile.communication_preferences.get("verbosity", "concise"),
+            "use_humor": user_profile.communication_preferences.get("use_humor", True),
+            "use_emoji": user_profile.communication_preferences.get("use_emoji", True),
+            "show_empathy": False, "be_encouraging": True, "match_energy": False, "response_type": "conversational",
+        }
+
+        # Apply trait-influenced guidance
+        try:
+            trait_guidance = self.get_trait_influenced_guidance(agent_id)
+            response_guidance.update(trait_guidance)
+        except Exception:
+            pass
+
+        # Get soul data
+        soul_data = None
+        try:
+            soul_data = self.get_soul(agent_id)
+        except Exception:
+            pass
+
+        # Evolve traits based on current message
+        if message:
+            try:
+                signals = self.analyze_interaction_for_traits(message)
+                if signals:
+                    self.evolve_traits(agent_id, signals)
+            except Exception:
+                pass
+
+        context = {
             "user": {
                 "profile": {"name": user_profile.preferred_name or user_profile.name,
                            "interests": user_profile.interests, "expertise": user_profile.expertise_areas},
@@ -1157,15 +1681,46 @@ class Brain:
             },
             "message_analysis": message_analysis,
             "memories": [asdict(m) for m in memories],
+            "soul": soul_data,
             "time_context": {"time_of_day": now.strftime("%H:%M"), "timestamp": now.isoformat()},
-            "response_guidance": {
-                "tone": "friendly", "formality": user_profile.communication_preferences.get("formality", "casual"),
-                "verbosity": user_profile.communication_preferences.get("verbosity", "concise"),
-                "use_humor": user_profile.communication_preferences.get("use_humor", True),
-                "use_emoji": user_profile.communication_preferences.get("use_emoji", True),
-                "show_empathy": False, "be_encouraging": True, "match_energy": False, "response_type": "conversational",
-            },
+            "response_guidance": response_guidance,
         }
+
+        # Apply token budget if specified
+        if max_tokens:
+            context = self._apply_token_budget(context, max_tokens)
+
+        return context
+
+    def _apply_token_budget(self, context: Dict[str, Any], max_tokens: int) -> Dict[str, Any]:
+        """
+        Trim context to fit within a token budget.
+        Priority: user profile > response_guidance > message_analysis > soul > memories > conversation history
+        """
+        total = self._estimate_tokens(json.dumps(context))
+        if total <= max_tokens:
+            return context
+
+        # Step 1: Trim memories (lowest importance first - they're already sorted desc)
+        memories = context.get("memories", [])
+        while memories and self._estimate_tokens(json.dumps(context)) > max_tokens:
+            memories.pop()  # Remove lowest importance (last in list)
+            context["memories"] = memories
+
+        # Step 2: Trim conversation history
+        history = context.get("conversation", {}).get("history", [])
+        if isinstance(history, list):
+            while history and self._estimate_tokens(json.dumps(context)) > max_tokens:
+                history.pop(0)  # Remove oldest
+                context["conversation"]["history"] = history
+
+        # Step 3: Truncate individual memory content
+        if self._estimate_tokens(json.dumps(context)) > max_tokens:
+            for mem in context.get("memories", []):
+                if len(mem.get("content", "")) > 200:
+                    mem["content"] = mem["content"][:200] + "..."
+
+        return context
     
     def process_message(self, message: str, session_key: str, user_id: str = "default", agent_id: str = "assistant") -> Dict[str, Any]:
         return self.get_full_context(session_key, user_id, agent_id, message)

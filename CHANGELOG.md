@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.2.0] - 2026-03-13
+
+### 🚀 Major Feature Release: Memory Management, Trait Evolution & Data Export
+
+Implements all features from the community roadmap (GitHub Issue #6).
+
+#### Added
+
+**Memory Management**
+- `forget(memory_id)` — Delete specific memories by ID
+- `correct(memory_id, new_content)` — Update/fix stored memory content
+
+**Retention Policies**
+- `ttl_hours` parameter on `remember()` — Time-to-live for temporary memories
+- `cleanup_expired()` — Remove all expired memories
+- `decay_importance()` — Gradually reduce importance of old memories
+- Expired memories auto-filtered from `recall()`
+
+**GDPR-Friendly Data Export**
+- `export_user_data(user_id)` — Export all user data as JSON
+
+**6-Trait Personality Evolution**
+- Traits: humor, empathy, curiosity, creativity, helpfulness, honesty
+- `get_soul()`, `evolve_traits()`, `analyze_interaction_for_traits()`
+- Auto-evolves on each `get_full_context()` call
+- Learning rate decreases over time to prevent wild swings
+
+**Token Budgeting**
+- `max_tokens` parameter on `get_full_context()`
+- Smart trimming: memories first, then conversation history
+
+**New CLI Commands**
+- `clawbrain forget`, `correct`, `cleanup-expired`, `decay-importance`, `export-user-data`
+
+#### Changed
+- `get_full_context()` now includes `soul` data and trait-influenced guidance
+- `recall()` automatically filters out expired memories
+
 ## [0.1.14] - 2026-02-10
 
 ### 📋 Scanner: Add Explicit Notes
